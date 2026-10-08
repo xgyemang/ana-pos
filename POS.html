@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <base target="_top">
+  <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0">
   <style>
-    /* Full Viewport Enforcers (Prevents Safari 300x150 iframe collapse) */
+    /* Full Viewport Enforcers */
     html, body { 
       width: 100%; 
       min-height: 100vh; 
@@ -23,468 +23,845 @@
     h2 { margin: 0 0 15px 0; font-size: 1.2rem; border-bottom: 2px solid #000; padding-bottom: 5px; }
     label { display: block; margin-top: 10px; font-weight: 600; font-size: 0.85rem; color: #444; }
     select, input, button { width: 100%; padding: 12px; margin-top: 4px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 16px; background: #fff;}
-    button { background: #000; color: #fff; font-weight: bold; border: none; margin-top: 15px; text-transform: uppercase; letter-spacing: 1px; }
-    button:disabled { background: #aaa; }
+    button { background: #000; color: #fff; font-weight: bold; border: none; margin-top: 15px; text-transform: uppercase; letter-spacing: 1px; cursor: pointer; }
+    button:disabled { background: #aaa; cursor: not-allowed; }
     .btn-add { background: #007bff; margin-top: 10px; }
     .btn-remove { background: #dc3545; color: white; padding: 6px 12px; border: none; border-radius: 4px; width: auto; font-size: 0.8rem; margin:0;}
-    .cart-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #eee; font-size: 0.9rem; }
+    
+    .cart-item { display: flex; flex-direction: column; padding: 10px 0; border-bottom: 1px solid #eee; font-size: 0.9rem; gap: 8px;}
+    .cart-item-header { display: flex; justify-content: space-between; align-items: center; font-weight: bold;}
+    .cart-item-controls { display: flex; gap: 10px; align-items: center;}
+    .cart-item-controls input { margin: 0; padding: 8px; font-size: 14px; }
+    
     .cart-total { font-weight: 900; font-size: 1.3rem; margin-top: 10px; text-align: right; color: #000; }
     .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
     
-    /* Header & Badge Styling */
     .header-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
     #staff-badge { font-size: 0.75rem; color: #666; font-weight: bold; text-transform: uppercase; }
     .btn-logout { background: transparent; color: #dc3545; border: 1px solid #dc3545; padding: 4px 8px; font-size: 0.7rem; margin: 0; width: auto; border-radius: 4px; }
     
     .error { color: #dc3545; font-weight: bold; text-align: center; margin-bottom: 10px; display: none; }
     
-    /* Dedicated Fullscreen Overlays */
-    .login-overlay { 
+    .login-overlay, .success-overlay { 
       position: fixed; 
-      top: 0; 
-      left: 0; 
-      width: 100vw; 
-      height: 100vh; 
-      display: flex; 
-      justify-content: center; 
-      align-items: center; 
-      flex-direction: column; 
+      top: 0; left: 0; width: 100vw; height: 100vh; 
+      display: flex; justify-content: center; align-items: center; flex-direction: column; 
       z-index: 999; 
-      background: #f0f2f5; 
-      color: #000;
-      overflow-y: auto; 
     }
-    .success-overlay { 
-      display: none; 
-      position: fixed; 
-      top: 0; 
-      left: 0; 
-      width: 100vw; 
-      height: 100vh; 
-      justify-content: center; 
-      align-items: center; 
-      flex-direction: column; 
-      z-index: 999; 
-      background: rgba(0,0,0,0.9); 
-      color: #fff; 
-    }
-    .success-overlay h1, .login-overlay h1 { font-size: 2rem; margin-bottom: 10px; text-align: center; }
+    .login-overlay { background: #f0f2f5; color: #000; overflow-y: auto; }
+    .success-overlay { display: none; background: rgba(0,0,0,0.95); color: #fff; }
+    .success-overlay h1, .login-overlay h1 { font-size: 2rem; margin-bottom: 10px; text-align: center; border: none; }
+    
+    .hidden { display: none !important; }
+
+    /* Inventory Selection Styles */
+    .inventory-list { max-height: 250px; overflow-y: auto; border: 1px solid #ccc; border-radius: 6px; margin-top: 10px; background: #fafafa; }
+    .inv-item { padding: 12px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+    .inv-item:last-child { border-bottom: none; }
+    .inv-item.selected { background: #e0f0ff; border-left: 4px solid #007bff; }
+    .inv-item.out-of-stock { opacity: 0.4; pointer-events: none; }
+    .inv-item-details { display: flex; flex-direction: column; }
+    .inv-item-name { font-weight: 600; font-size: 1rem; }
+    .inv-item-meta { font-size: 0.8rem; color: #666; }
+    .inv-item-price { font-weight: bold; }
+    .search-bar { margin-bottom: 5px; }
+    
+    /* Payment Summary */
+    .summary-row { display: flex; justify-content: space-between; font-size: 1.1rem; margin-top: 5px; }
+    .summary-balance { font-size: 1.2rem; font-weight: bold; color: #dc3545; border-top: 1px solid #ccc; padding-top: 5px; margin-top: 5px; }
   </style>
 </head>
 <body>
+
   <!-- PIN LOGIN SCREEN -->
-  <div id="login-screen" class="login-overlay">
+  <div id="login-screen" class="login-overlay hidden">
     <div style="width: 80%; max-width: 300px; background: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); margin: auto;">
-      <h1 style="text-align: center; margin-top: 0; font-size: 1.5rem;">ANA POS</h1>
-      
-      <!-- EMERGENCY RESET LINK -->
-      <div style="margin-bottom: 15px; text-align: center;">
-        <a href="javascript:void(0)" 
-           onclick="localStorage.clear(); sessionStorage.clear(); window.location.reload();" 
-           style="color: #dc3545; font-size: 0.75rem; font-weight: bold; text-decoration: underline;">
-          System Frozen? Tap to Reset
-        </a>
-      </div>
-      <label style="text-align: center;" id="login-label">Enter Staff PIN</label>
+      <h1>ANA POS</h1>
+      <label style="text-align: center;">Enter Staff PIN</label>
       <input type="password" id="pin-input" style="text-align: center; font-size: 1.5rem; letter-spacing: 5px;" pattern="[0-9]*" inputmode="numeric">
-      <button id="login-btn" onclick="submitPin()">LOGIN</button>
-      
+      <button id="login-btn">LOGIN</button>
       <div id="login-error" class="error" style="margin-top:15px; font-size: 0.85rem;"></div>
     </div>
   </div>
+
+  <!-- HEADER -->
   <div class="header-bar">
     <div><strong>ANA ACCESSORIES</strong> / POS</div>
-    <div>
+    <div style="display: flex; align-items: center; gap: 10px;">
       <span id="pos-staff-badge"></span>
-      <button onclick="window.location.reload();" style="background:#444; color:#fff; border:none; padding:4px 8px; font-size:0.7rem; border-radius:4px; margin-left:5px; width:auto; cursor:pointer;">Refresh</button>
-      <button class="btn-logout" onclick="posLogout()">Logout</button>
-    </div>
-  </div>
-  <!-- CART BUILDER SECTION -->
-  <div class="card">
-    <h2>1. ADD TO CART</h2>
-    <label>Product</label>
-    <select id="item-select" onchange="updatePriceField()">
-      <option value="">Loading inventory...</option>
-    </select>
-    <div class="grid-3">
-      <div>
-        <label>Category</label>
-        <select id="category-select" style="padding: 12px 5px;">
-          <option value="Cable">Cable</option>
-          <option value="Charger">Charger</option>
-          <option value="Audio">Audio</option>
-          <option value="Privacy">Privacy</option>
-          <option value="Glass">Glass</option>
-          <option value="Case">Case</option>
-          <option value="Adapter">Adapter</option>
-          <option value="Power Bank">Power Bk</option>
-          <option value="Other">Other</option>
-        </select>
-      </div>
-      <div>
-        <label>Unit Price</label>
-        <input type="number" id="price-input" value="0" step="0.5" min="0" style="padding: 12px 5px;">
-      </div>
-      <div>
-        <label>Qty</label>
-        <input type="number" id="qty-input" value="1" min="1" style="padding: 12px 5px;">
-      </div>
-    </div>
-    <button class="btn-add" onclick="addToCart()">+ Add Item</button>
-  </div>
-  <!-- CURRENT CART SECTION -->
-  <div class="card">
-    <h2>2. CART SUMMARY</h2>
-    <div id="cart-items"></div>
-    <div class="cart-total" id="cart-total">TOTAL: GHS 0.00</div>
-  </div>
-  <div class="grid-2">
-      <div>
-        <label>Customer Type</label>
-        <select id="cust-type">
-          <option value="Continuing Student">Continuing Student</option>
-          <option value="Freshman">Freshman</option>
-          <option value="Friend">Friend</option>
-          <option value="Referrer">Referrer</option>
-          <option value="Outsider">Outsider</option>
-          <option value="Unknown">Unknown</option>
-        </select>
-      </div>
-      <div>
-        <label>Customer Name (Required for Credit)</label>
-        <input type="text" id="cust-name" placeholder="Leave blank if fully paid">
-      </div>
-    </div>
-    
-    <div style="margin-top: 15px;">
-      <label>Branch</label>
-      <select id="branch-select">
+      <select id="admin-branch-select" class="hidden" style="padding: 4px; margin: 0; width: auto; font-size: 0.8rem;">
         <option value="AdjeiMess Hostel">AdjeiMess</option>
         <option value="Winta Hostel">Winta</option>
       </select>
+      <button class="btn-logout" id="logout-btn">Logout</button>
     </div>
+  </div>
+
+  <!-- ADD TO CART SECTION -->
+  <div class="card">
+    <h2>1. ADD TO CART</h2>
+    
+    <div class="grid-2 search-bar">
+      <input type="search" id="inv-search" placeholder="Search product...">
+      <select id="inv-category">
+        <option value="All">All Categories</option>
+      </select>
+    </div>
+    
+    <div class="inventory-list" id="inventory-list">
+      <!-- Populated by JS -->
+      <div style="padding:15px; text-align:center; color:#666;">Loading inventory...</div>
+    </div>
+
+    <div class="grid-2" style="margin-top: 10px;">
+      <div>
+        <label>Selected Price</label>
+        <input type="text" id="selected-price" value="0.00" disabled style="background: #eee;">
+      </div>
+      <div>
+        <label>Qty to Add</label>
+        <input type="number" id="qty-input" value="1" min="1" step="1">
+      </div>
+    </div>
+    
+    <button class="btn-add" id="add-to-cart-btn" disabled>+ Add Selected Item</button>
+  </div>
+
+  <!-- CART SUMMARY SECTION -->
+  <div class="card">
+    <h2>2. CART SUMMARY</h2>
+    <div id="cart-items"></div>
+    <div class="cart-total" id="cart-total">TOTAL: 0.00</div>
+  </div>
+
+  <!-- CHECKOUT SECTION -->
+  <div class="card">
+    <h2>3. CHECKOUT</h2>
+    
+    <label>Customer Type</label>
+    <select id="cust-type">
+      <option value="Unknown">Unknown</option>
+      <option value="Continuing Student">Continuing Student</option>
+      <option value="Freshman">Freshman</option>
+      <option value="Friend">Friend</option>
+      <option value="Referrer">Referrer</option>
+      <option value="Outsider">Outsider</option>
+    </select>
+    
+    <div id="cust-name-container" class="hidden">
+      <label>Customer Name (Required for Credit)</label>
+      <input type="text" id="cust-name" placeholder="Enter name">
+    </div>
+
     <label style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 10px;">MONEY IN (What they handed you)</label>
     <div class="grid-2">
-      <div><label>Cash In</label><input type="number" id="cash-in" value="0" min="0" step="0.5"></div>
-      <div><label>MoMo In</label><input type="number" id="momo-in" value="0" min="0" step="0.5"></div>
+      <div><label>Cash In</label><input type="number" id="cash-in" class="pay-input" value="0" min="0" step="0.01"></div>
+      <div><label>MoMo In</label><input type="number" id="momo-in" class="pay-input" value="0" min="0" step="0.01"></div>
     </div>
-    <label>Bank In</label><input type="number" id="bank-in" value="0" min="0" step="0.5">
+    <label>Bank In</label><input type="number" id="bank-in" class="pay-input" value="0" min="0" step="0.01">
+    
     <label style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 10px;">CHANGE OUT (What you gave back)</label>
     <div class="grid-2">
-      <div><label>Cash Out</label><input type="number" id="cash-out" value="0" min="0" step="0.5"></div>
-      <div><label>MoMo Out</label><input type="number" id="momo-out" value="0" min="0" step="0.5"></div>
+      <div><label>Cash Out</label><input type="number" id="cash-out" class="pay-input" value="0" min="0" step="0.01"></div>
+      <div><label>MoMo Out</label><input type="number" id="momo-out" class="pay-input" value="0" min="0" step="0.01"></div>
     </div>
-    <button id="checkout-btn" onclick="submitSale()">SUBMIT SALE</button>
+
+    <div style="margin-top: 15px; background: #fafafa; padding: 10px; border-radius: 6px; border: 1px solid #ddd;">
+      <div class="summary-row"><span>Total Due:</span> <span id="sum-total">0.00</span></div>
+      <div class="summary-row"><span>Net Paid:</span> <span id="sum-paid">0.00</span></div>
+      <div class="summary-row summary-balance"><span>Balance:</span> <span id="sum-balance">0.00</span></div>
+    </div>
+
+    <div id="checkout-error" class="error" style="margin-top:15px; font-size: 0.9rem;"></div>
+    <button id="checkout-btn">SUBMIT SALE</button>
   </div>
+
   <!-- SUCCESS SCREEN -->
   <div id="success-screen" class="success-overlay">
-    <h1 style="font-size: 2.5rem; margin-bottom: 10px; text-align: center; border: none;">SALE LOGGED</h1>
-    <p style="margin-bottom: 25px; font-size: 1.1rem; color: #ccc;">Transaction pushed to ledger.</p>
-    <button style="width: 80%; max-width: 300px; background: #007bff; color: #fff; padding: 15px; border: none; border-radius: 8px; font-weight: bold; font-size: 1.2rem; cursor: pointer; letter-spacing: 1px;" onclick="resetApp()">NEW SALE</button>
+    <h1>SALE LOGGED</h1>
+    <p style="margin-bottom: 5px; font-size: 1.1rem; color: #ccc;">Transaction pushed to ledger.</p>
+    <p id="success-trans-id" style="margin-bottom: 25px; font-size: 1.5rem; font-family: monospace; color: #4ade80;"></p>
+    <button style="width: 80%; max-width: 300px; background: #007bff; padding: 15px; border-radius: 8px; font-size: 1.2rem;" id="new-sale-btn">NEW SALE</button>
   </div>
-  
+
   <script>
-    // RULE 1 & 2: Decoupled Backend Config (Replace with your Apps Script Web App URL)
+    // ==========================================
+    // CONFIGURATION & STATE
+    // ==========================================
     const API_URL = 'https://script.google.com/macros/s/AKfycbyScU76FT_DCDLPkte-yl5BrsL2HJliLPZGcKrAtsy1YeoSHY5aa48-OIIeL9d6mJwlkg/exec';
-
-    let inventoryData = [];
-    let cart = [];
-    let currentStaff = {};
-    let currentRequestId = null; // Enforces idempotency for write requests
-    let hiddenAt = 0;
-
-    /**
-     * UNIVERSAL API CALLER (Rules 2, 3, & 4)
-     * Wraps every request as POST with text/plain JSON.
-     * Injects the action route, stored PIN, and handles session expiration gracefully.
-     */
-    async function apiCall(action, payload = {}, requestId = null) {
-      const pin = localStorage.getItem('ana_pos_pin');
-      const token = localStorage.getItem('ana_pos_token'); // Backend expects session token
-      
-      // Ensures the payload itself always carries the PIN as requested
-      if (pin) payload.pin = pin;
-
-      const body = {
-        action: action,
-        token: token || pin, 
-        payload: payload
-      };
-      
-      if (requestId) body.requestId = requestId;
-
-      const response = await fetch(API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify(body)
-      });
-      
-      const data = await response.json();
-      
-      if (data.sessionExpired) {
-        posLogout(); // Immediately wipes auth and kicks user out
-        throw new Error("SESSION_EXPIRED");
-      }
-      
-      return data;
-    }
-
-    // INITIALIZATION 
-    window.onload = function() {
-      const storedPin = localStorage.getItem('ana_pos_pin');
-      if (storedPin) {
-        // Auto-verify if session data still exists
-        submitPin(storedPin);
-      } else {
-        document.getElementById('login-screen').style.display = 'flex';
-      }
+    const round2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
+    
+    let state = {
+      user: null, // {name, role, branch}
+      token: null,
+      inventory: [],
+      selectedItem: null,
+      cart: [],
+      hiddenAt: 0
     };
 
-    // WAKE UP SYNC (Rule 7)
-    document.addEventListener('visibilitychange', function () {
-      if (document.visibilityState === 'hidden') {
-        hiddenAt = Date.now();
-        return;
+    // Load persisted state
+    try {
+      const savedUser = localStorage.getItem('ana_pos_user');
+      const savedToken = localStorage.getItem('ana_pos_token');
+      const savedCart = localStorage.getItem('ana_pos_cart');
+      if (savedUser && savedToken) {
+        state.user = JSON.parse(savedUser);
+        state.token = savedToken;
       }
+      if (savedCart) {
+        const parsed = JSON.parse(savedCart);
+        if (Array.isArray(parsed)) {
+          state.cart = parsed.filter(c => {
+            if (typeof c.item !== 'string' || !c.item.trim()) return false;
+            if (!Number.isFinite(c.price)) return false;
+            if (!Number.isInteger(c.qty) || c.qty < 1) return false;
+            if ('priceOverride' in c) {
+              if (!Number.isFinite(c.priceOverride) || c.priceOverride <= 0) {
+                delete c.priceOverride;
+              }
+            }
+            return true;
+          });
+        }
+      }
+    } catch (e) { console.warn("Local storage parse error", e); }
+
+    // ==========================================
+    // CORE API WRAPPER
+    // ==========================================
+    async function apiCall(action, payload = {}, includeRequestId = false) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
       
-      // If screen was off/hidden for > 45 seconds, silently fetch inventory
-      if (hiddenAt && Date.now() - hiddenAt > 45000) {
-        if (localStorage.getItem('ana_pos_pin')) {
-          fetchInventory();
+      const body = {
+        action: action,
+        token: state.token,
+        payload: payload
+      };
+
+      if (includeRequestId) {
+        let pending = JSON.parse(localStorage.getItem('ana_pos_pending_req') || 'null');
+        
+        if (pending && JSON.stringify(pending.payload) === JSON.stringify(payload)) {
+          body.requestId = pending.requestId;
         } else {
-          posLogout();
+          body.requestId = 'REQ-' + crypto.randomUUID();
+          localStorage.setItem('ana_pos_pending_req', JSON.stringify({
+            requestId: body.requestId,
+            payload: payload,
+            uncertain: false,
+            acknowledged: false
+          }));
+        }
+      }
+
+      try {
+        const response = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(body),
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        const data = await response.json();
+        
+        if (data.sessionExpired) {
+          handleLogout(true);
+          throw new Error("Session expired. Please login again.");
+        }
+        return data;
+      } catch (err) {
+        clearTimeout(timeoutId);
+        if (err.name === 'AbortError') throw new Error("Network timeout (30s). Check your connection.");
+        throw err;
+      }
+    }
+
+    // ==========================================
+    // INITIALIZATION & WAKE-UP
+    // ==========================================
+    document.addEventListener("DOMContentLoaded", () => {
+      bindEvents();
+      if (state.token && state.user) {
+        document.getElementById('login-screen').classList.add('hidden');
+        setupUIForUser();
+        fetchInventory();
+        renderCart();
+      } else {
+        document.getElementById('login-screen').classList.remove('hidden');
+      }
+    });
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') {
+        state.hiddenAt = Date.now();
+      } else {
+        if (state.token && state.hiddenAt && (Date.now() - state.hiddenAt > 45000)) {
+          fetchInventory();
         }
       }
     });
 
-    async function submitPin(autoPin = null) {
-      const pin = autoPin || document.getElementById('pin-input').value;
-      const errorDiv = document.getElementById('login-error');
-      errorDiv.style.display = 'none';
+    // ==========================================
+    // PENDING SALE WARNING GUARD
+    // ==========================================
+    function checkPendingWarning() {
+      const pendingStr = localStorage.getItem('ana_pos_pending_req');
+      if (pendingStr) {
+        const pending = JSON.parse(pendingStr);
+        if (pending.uncertain && !pending.acknowledged) {
+          if (!confirm("Your last sale was not confirmed and may already be recorded. Check before continuing.")) {
+            return false;
+          }
+          pending.acknowledged = true;
+          localStorage.setItem('ana_pos_pending_req', JSON.stringify(pending));
+        }
+      }
+      return true;
+    }
+
+    function handleInputFocus(e) {
+      const pendingStr = localStorage.getItem('ana_pos_pending_req');
+      if (pendingStr) {
+        const pending = JSON.parse(pendingStr);
+        if (pending.uncertain && !pending.acknowledged) {
+          if (!confirm("Your last sale was not confirmed and may already be recorded. Check before continuing.")) {
+            e.target.blur();
+          } else {
+            pending.acknowledged = true;
+            localStorage.setItem('ana_pos_pending_req', JSON.stringify(pending));
+          }
+        }
+      }
+    }
+
+    // ==========================================
+    // AUTHENTICATION
+    // ==========================================
+    async function handleLogin() {
+      const btn = document.getElementById('login-btn');
+      if (btn.disabled) return;
       
-      if (!pin) {
-        errorDiv.innerText = "PIN required";
-        errorDiv.style.display = 'block';
+      const pinInput = document.getElementById('pin-input');
+      const errDiv = document.getElementById('login-error');
+      const pin = pinInput.value.trim();
+
+      errDiv.style.display = 'none';
+      if (!/^\d{6,}$/.test(pin)) {
+        errDiv.textContent = "PIN must be at least 6 digits.";
+        errDiv.style.display = 'block';
         return;
       }
-      
-      const btn = document.getElementById('login-btn');
-      if (btn) {
-        btn.innerText = "VERIFYING...";
-        btn.disabled = true;
-      }
-      
+
+      btn.disabled = true;
+      btn.textContent = "VERIFYING...";
+
       try {
-        const data = await apiCall("login", { pin: pin });
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 30000);
         
+        const response = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action: "login", payload: { pin: pin } }),
+          signal: controller.signal
+        });
+        clearTimeout(timeout);
+        const data = await response.json();
+
         if (!data.success) {
-          throw new Error(data.error || "Invalid PIN or Inactive Staff");
+          throw new Error(data.error || "Login failed");
         }
+
+        state.token = data.token;
+        state.user = data.user;
+        localStorage.setItem('ana_pos_token', data.token);
+        localStorage.setItem('ana_pos_user', JSON.stringify(data.user));
         
-        // Save local auth states
-        localStorage.setItem('ana_pos_pin', pin);
-        if (data.token) localStorage.setItem('ana_pos_token', data.token);
-        
-        currentStaff = data.user || {};
-        
-        // Hide login and setup UI
-        document.getElementById('login-screen').style.display = 'none';
-        const badge = document.getElementById('pos-staff-badge');
-        if (badge) badge.innerText = "STAFF: " + (currentStaff.name || "Unknown");
-        
-        if (currentStaff.branch && currentStaff.branch !== "All") {
-          document.getElementById('branch-select').value = currentStaff.branch;
-        }
-        
+        pinInput.value = "";
+        document.getElementById('login-screen').classList.add('hidden');
+        setupUIForUser();
         fetchInventory();
-        
+        updatePaymentTotals();
+
       } catch (err) {
-        if (err.message === "SESSION_EXPIRED") return; // Handled globally
-        if (btn) { btn.innerText = "LOGIN"; btn.disabled = false; }
-        errorDiv.innerText = err.message;
-        errorDiv.style.display = 'block';
-        localStorage.removeItem('ana_pos_pin');
+        errDiv.textContent = err.name === 'AbortError' ? "Network timeout." : err.message;
+        errDiv.style.display = 'block';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "LOGIN";
       }
+    }
+
+    async function handleLogout(isExpiry = false) {
+      if (!isExpiry) {
+        if (!confirm("Are you sure you want to logout? This will clear your cart and pending transactions.")) return;
+        state.cart = [];
+        localStorage.removeItem('ana_pos_cart');
+        localStorage.removeItem('ana_pos_pending_req');
+        renderCart();
+      }
+
+      if (state.token) {
+        try { await apiCall("logout"); } catch(e) {} 
+      }
+      state.token = null;
+      state.user = null;
+      localStorage.removeItem('ana_pos_token');
+      localStorage.removeItem('ana_pos_user');
+      
+      document.getElementById('pos-staff-badge').textContent = "";
+      document.getElementById('admin-branch-select').classList.add('hidden');
+      document.getElementById('login-screen').classList.remove('hidden');
+      
+      updatePaymentTotals();
+    }
+
+    function setupUIForUser() {
+      document.getElementById('pos-staff-badge').textContent = `STAFF: ${state.user.name} (${state.user.role})`;
+      const branchSel = document.getElementById('admin-branch-select');
+      if (state.user.role === 'admin' && state.user.branch === 'All') {
+        branchSel.classList.remove('hidden');
+      } else {
+        branchSel.classList.add('hidden');
+      }
+    }
+
+    function getActiveBranch() {
+      if (state.user.role === 'admin' && state.user.branch === 'All') {
+        return document.getElementById('admin-branch-select').value;
+      }
+      return state.user.branch;
+    }
+
+    // ==========================================
+    // INVENTORY MANAGEMENT
+    // ==========================================
+    function showInvError(msg) {
+      const listDiv = document.getElementById('inventory-list');
+      listDiv.innerHTML = '';
+      
+      const wrap = document.createElement('div');
+      wrap.style.cssText = "padding:15px; text-align:center; color:#dc3545;";
+      
+      const textNode = document.createElement('span');
+      textNode.textContent = msg;
+      wrap.appendChild(textNode);
+      
+      wrap.appendChild(document.createElement('br'));
+      wrap.appendChild(document.createElement('br'));
+      
+      const btn = document.createElement('button');
+      btn.style.cssText = "width:auto; padding:8px 16px;";
+      btn.textContent = "Retry";
+      btn.addEventListener('click', fetchInventory);
+      
+      wrap.appendChild(btn);
+      listDiv.appendChild(wrap);
     }
 
     async function fetchInventory() {
+      const listDiv = document.getElementById('inventory-list');
+      listDiv.innerHTML = '<div style="padding:15px; text-align:center; color:#666;">Loading inventory...</div>';
       try {
-        const data = await apiCall("getLiveInventory", { branch: document.getElementById('branch-select').value });
+        const data = await apiCall("getLiveInventory", { branch: getActiveBranch() });
         if (data.success && data.inventory) {
-          loadInventory(data.inventory);
+          state.inventory = data.inventory;
+          populateCategories();
+          renderInventory();
+        } else {
+          showInvError(data.error || "Failed to load inventory.");
         }
       } catch (err) {
-        if (err.message !== "SESSION_EXPIRED") {
-          console.warn("Inventory fetch failed:", err);
+        if (err.message !== "Session expired. Please login again.") {
+          showInvError(err.message);
         }
       }
     }
 
-    function posLogout() {
-      localStorage.removeItem('ana_pos_pin');
-      localStorage.removeItem('ana_pos_token');
+    function populateCategories() {
+      const catSelect = document.getElementById('inv-category');
+      const currentVal = catSelect.value;
       
-      document.getElementById('login-screen').style.display = 'flex';
-      document.getElementById('pin-input').style.display = 'block';
+      const cats = new Set(state.inventory.map(i => i.category).filter(Boolean));
+      catSelect.innerHTML = '';
       
-      const loginBtn = document.getElementById('login-btn');
-      if (loginBtn) {
-        loginBtn.style.display = 'block';
-        loginBtn.innerText = "LOGIN";
-        loginBtn.disabled = false;
-      }
+      const allOpt = document.createElement('option');
+      allOpt.value = "All";
+      allOpt.textContent = "All Categories";
+      catSelect.appendChild(allOpt);
+
+      Array.from(cats).sort().forEach(cat => {
+        const opt = document.createElement('option');
+        opt.value = cat;
+        opt.textContent = cat;
+        catSelect.appendChild(opt);
+      });
       
-      document.getElementById('pin-input').value = "";
-      const badge = document.getElementById('pos-staff-badge');
-      if (badge) badge.innerText = "";
+      if (cats.has(currentVal)) catSelect.value = currentVal;
     }
 
-    function loadInventory(data) {
-      if (!data || !Array.isArray(data)) return;
-      inventoryData = data;
-      alert("RAW DATA: " + JSON.stringify(data[0]));
-      const select = document.getElementById('item-select');
-      const currentVal = select.value;
-      select.innerHTML = '<option value="">-- Select Product --</option>';
-      data.forEach(item => {
-        let opt = document.createElement('option');
-        opt.value = item.item;
-        opt.text = item.item;
-        select.appendChild(opt);
+    function renderInventory() {
+      const listDiv = document.getElementById('inventory-list');
+      const searchTerm = document.getElementById('inv-search').value.toLowerCase();
+      const catFilter = document.getElementById('inv-category').value;
+      
+      listDiv.innerHTML = '';
+      state.selectedItem = null;
+      document.getElementById('selected-price').value = "0.00";
+      document.getElementById('add-to-cart-btn').disabled = true;
+
+      const filtered = state.inventory.filter(item => {
+        const matchesSearch = item.item.toLowerCase().includes(searchTerm);
+        const matchesCat = catFilter === "All" || item.category === catFilter;
+        return matchesSearch && matchesCat;
       });
-      if (currentVal) select.value = currentVal;
-    }
-    
-    function updatePriceField() {
-      const itemName = document.getElementById('item-select').value;
-      if (!itemName) {
-        document.getElementById('price-input').value = "0";
+
+      if (filtered.length === 0) {
+        const empty = document.createElement('div');
+        empty.style.cssText = "padding:15px; text-align:center; color:#666;";
+        empty.textContent = "No items found.";
+        listDiv.appendChild(empty);
         return;
       }
-      const product = inventoryData.find(i => i.item === itemName);
-      if (product) {
-        document.getElementById('price-input').value = product.price;
+
+      filtered.forEach(item => {
+        const div = document.createElement('div');
+        div.className = `inv-item ${item.stock <= 0 ? 'out-of-stock' : ''}`;
+        
+        const details = document.createElement('div');
+        details.className = "inv-item-details";
+        
+        const name = document.createElement('span');
+        name.className = "inv-item-name";
+        name.textContent = item.item;
+        
+        const meta = document.createElement('span');
+        meta.className = "inv-item-meta";
+        meta.textContent = `${item.category} | Stock: ${item.stock}`;
+        
+        details.appendChild(name);
+        details.appendChild(meta);
+
+        const price = document.createElement('span');
+        price.className = "inv-item-price";
+        price.textContent = Number(item.price).toFixed(2);
+
+        div.appendChild(details);
+        div.appendChild(price);
+
+        if (item.stock > 0) {
+          div.addEventListener('click', () => {
+            document.querySelectorAll('.inv-item').forEach(el => el.classList.remove('selected'));
+            div.classList.add('selected');
+            state.selectedItem = item;
+            document.getElementById('selected-price').value = Number(item.price).toFixed(2);
+            document.getElementById('qty-input').value = 1;
+            document.getElementById('add-to-cart-btn').disabled = false;
+          });
+        }
+        listDiv.appendChild(div);
+      });
+    }
+
+    // ==========================================
+    // CART MANAGEMENT
+    // ==========================================
+    function handleAddToCart() {
+      if (!state.selectedItem) return;
+      if (!checkPendingWarning()) return;
+      
+      const qty = parseInt(document.getElementById('qty-input').value, 10);
+      if (isNaN(qty) || qty < 1) {
+        alert("Quantity must be at least 1");
+        return;
+      }
+
+      const existing = state.cart.find(c => c.item === state.selectedItem.item);
+      const currentCartQty = existing ? existing.qty : 0;
+      
+      if (currentCartQty + qty > state.selectedItem.stock) {
+        alert(`Cannot add more. Stock available: ${state.selectedItem.stock}`);
+        return;
+      }
+
+      if (existing) {
+        existing.qty += qty;
+      } else {
+        state.cart.push({
+          item: state.selectedItem.item,
+          price: state.selectedItem.price,
+          qty: qty
+        });
+      }
+
+      saveCart();
+      renderCart();
+      
+      document.querySelectorAll('.inv-item').forEach(el => el.classList.remove('selected'));
+      state.selectedItem = null;
+      document.getElementById('selected-price').value = "0.00";
+      document.getElementById('qty-input').value = 1;
+      document.getElementById('add-to-cart-btn').disabled = true;
+    }
+
+    function removeCartItem(index) {
+      if (!checkPendingWarning()) return;
+      state.cart.splice(index, 1);
+      saveCart();
+      renderCart();
+    }
+
+    function updateCartItemQty(index, newQty) {
+      const qty = parseInt(newQty, 10);
+      if (!isNaN(qty) && qty >= 1) {
+        state.cart[index].qty = qty;
+        saveCart();
+        renderCart();
+      } else {
+        renderCart(); 
       }
     }
 
-    function addToCart() {
-      const itemName = document.getElementById('item-select').value;
-      const category = document.getElementById('category-select').value;
-      const qty = parseInt(document.getElementById('qty-input').value);
-      const overridePrice = parseFloat(document.getElementById('price-input').value);
-      
-      if (!itemName || qty < 1 || isNaN(overridePrice)) return;
-      
-      const product = inventoryData.find(i => i.item === itemName);
-      cart.push({
-        item: product ? product.item : itemName,
-        category: category,
-        qty: qty,
-        price: overridePrice, 
-        cost: product ? product.cost : 0
-      });
-      
-      document.getElementById('item-select').value = "";
-      document.getElementById('qty-input').value = "1";
-      document.getElementById('price-input').value = "0";
+    function updateCartItemOverride(index, overrideVal) {
+      if (overrideVal.trim() === "") {
+        delete state.cart[index].priceOverride;
+      } else {
+        const val = parseFloat(overrideVal);
+        if (!isFinite(val) || val <= 0) {
+          alert("Invalid override price. Must be a finite number above 0.");
+          delete state.cart[index].priceOverride;
+        } else {
+          state.cart[index].priceOverride = val;
+        }
+      }
+      saveCart();
       renderCart();
+    }
+
+    function saveCart() {
+      localStorage.setItem('ana_pos_cart', JSON.stringify(state.cart));
+      updatePaymentTotals();
     }
 
     function renderCart() {
       const container = document.getElementById('cart-items');
-      container.innerHTML = "";
-      let total = 0;
-      if (cart.length === 0) {
-        container.innerHTML = "<div style='text-align:center; color:#888; font-size:0.8rem;'>Cart is empty</div>";
-      }
-      cart.forEach((c, index) => {
-        let lineTotal = c.price * c.qty;
-        total += lineTotal;
-        container.innerHTML += `
-          <div class="cart-item">
-            <div><strong>${c.qty}x</strong> ${c.item}<br><small style="color:#666;">GHS ${c.price} ea</small></div>
-            <div>
-              <span style="font-weight:bold; margin-right:10px;">GHS ${lineTotal}</span>
-              <button class="btn-remove" onclick="removeItem(${index})">X</button>
-            </div>
-          </div>
-        `;
-      });
-      document.getElementById('cart-total').innerText = "TOTAL: GHS " + total.toFixed(2);
-    }
-
-    function removeItem(index) {
-      cart.splice(index, 1);
-      renderCart();
-    }
-
-    async function submitSale() {
-      if (cart.length === 0) {
-        alert("Cart is empty.");
+      container.innerHTML = '';
+      
+      if (state.cart.length === 0) {
+        const empty = document.createElement('div');
+        empty.style.cssText = "text-align:center; color:#888; font-size:0.8rem;";
+        empty.textContent = "Cart is empty";
+        container.appendChild(empty);
+        document.getElementById('cart-total').textContent = "TOTAL: 0.00";
+        updatePaymentTotals();
         return;
       }
+
+      let total = 0;
+      
+      state.cart.forEach((c, index) => {
+        const displayPrice = (state.user && state.user.role === 'admin' && c.priceOverride !== undefined && !isNaN(c.priceOverride)) 
+                              ? c.priceOverride 
+                              : c.price;
+        const lineTotal = round2(displayPrice * c.qty);
+        total = round2(total + lineTotal);
+
+        const itemDiv = document.createElement('div');
+        itemDiv.className = 'cart-item';
+        
+        const headerDiv = document.createElement('div');
+        headerDiv.className = 'cart-item-header';
+        
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = c.item;
+        
+        const totalSpan = document.createElement('span');
+        totalSpan.textContent = lineTotal.toFixed(2);
+        
+        headerDiv.appendChild(nameSpan);
+        headerDiv.appendChild(totalSpan);
+
+        const controlsDiv = document.createElement('div');
+        controlsDiv.className = 'cart-item-controls';
+        
+        const qtyLabel = document.createElement('span');
+        qtyLabel.textContent = "Qty:";
+        
+        const qtyInput = document.createElement('input');
+        qtyInput.type = "number";
+        qtyInput.min = "1";
+        qtyInput.value = c.qty;
+        qtyInput.style.width = "70px";
+        qtyInput.addEventListener('focus', handleInputFocus);
+        qtyInput.addEventListener('change', (e) => updateCartItemQty(index, e.target.value));
+        
+        controlsDiv.appendChild(qtyLabel);
+        controlsDiv.appendChild(qtyInput);
+
+        if (state.user && state.user.role === 'admin') {
+          const overInput = document.createElement('input');
+          overInput.type = "number";
+          overInput.step = "0.01";
+          overInput.placeholder = "Override Price";
+          overInput.style.width = "120px";
+          if (c.priceOverride !== undefined) overInput.value = c.priceOverride;
+          overInput.addEventListener('focus', handleInputFocus);
+          overInput.addEventListener('change', (e) => updateCartItemOverride(index, e.target.value));
+          controlsDiv.appendChild(overInput);
+        } else {
+          const priceDisplay = document.createElement('span');
+          priceDisplay.style.color = "#666";
+          priceDisplay.style.fontSize = "0.8rem";
+          priceDisplay.style.marginLeft = "10px";
+          priceDisplay.textContent = `@ ${Number(c.price).toFixed(2)}`;
+          controlsDiv.appendChild(priceDisplay);
+        }
+
+        const rmBtn = document.createElement('button');
+        rmBtn.className = 'btn-remove';
+        rmBtn.textContent = 'X';
+        rmBtn.style.marginLeft = 'auto';
+        rmBtn.addEventListener('click', () => removeCartItem(index));
+        controlsDiv.appendChild(rmBtn);
+
+        itemDiv.appendChild(headerDiv);
+        itemDiv.appendChild(controlsDiv);
+        container.appendChild(itemDiv);
+      });
+
+      document.getElementById('cart-total').textContent = "TOTAL: " + total.toFixed(2);
+      updatePaymentTotals();
+    }
+
+    // ==========================================
+    // PAYMENT & CHECKOUT
+    // ==========================================
+    function getVal(id) {
+      const val = parseFloat(document.getElementById(id).value);
+      return isNaN(val) ? 0 : val;
+    }
+
+    function updatePaymentTotals() {
+      let cartTotal = 0;
+      state.cart.forEach(c => {
+        const displayPrice = (state.user && state.user.role === 'admin' && c.priceOverride !== undefined && !isNaN(c.priceOverride)) ? c.priceOverride : c.price;
+        const lineTotal = round2(displayPrice * c.qty);
+        cartTotal = round2(cartTotal + lineTotal);
+      });
+
+      const moneyIn = round2(getVal('cash-in') + getVal('momo-in') + getVal('bank-in'));
+      const moneyOut = round2(getVal('cash-out') + getVal('momo-out'));
+      const netPaid = round2(moneyIn - moneyOut);
+      const balance = round2(cartTotal - netPaid);
+
+      document.getElementById('sum-total').textContent = cartTotal.toFixed(2);
+      document.getElementById('sum-paid').textContent = netPaid.toFixed(2);
+      
+      const balEl = document.getElementById('sum-balance');
+      balEl.textContent = balance.toFixed(2);
       
       const btn = document.getElementById('checkout-btn');
-      btn.disabled = true;
-      btn.innerText = "PROCESSING...";
-      
-      // RULE 6: Checkout Payload Formatting (customerName, customerType, cart array)
-      const payload = {
-        customerName: document.getElementById('cust-name').value.trim(),
-        customerType: document.getElementById('cust-type').value,
-        branch: document.getElementById('branch-select').value,
-        cashIn: parseFloat(document.getElementById('cash-in').value) || 0,
-        momoIn: parseFloat(document.getElementById('momo-in').value) || 0,
-        bankIn: parseFloat(document.getElementById('bank-in').value) || 0,
-        cashOut: parseFloat(document.getElementById('cash-out').value) || 0,
-        momoOut: parseFloat(document.getElementById('momo-out').value) || 0,
-        cart: cart
-      };
-      
-      let cartTotal = cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
-      let moneyIn = payload.cashIn + payload.momoIn + payload.bankIn;
-      let moneyOut = payload.cashOut + payload.momoOut;
-      let netMoney = moneyIn - moneyOut;
-      
-      if (netMoney < cartTotal) {
-        if (!confirm("WARNING: Net money collected (GHS " + netMoney + ") is less than cart total (GHS " + cartTotal + "). Is this a partial credit/debt sale?")) {
-          btn.disabled = false;
-          btn.innerText = "SUBMIT SALE";
-          return;
-        }
-      }
-      
-      // RULE 5: Mandatory Request ID (Formatted explicitly as REQ-[UUID])
-      if (!currentRequestId) {
-        currentRequestId = 'REQ-' + crypto.randomUUID();
-      }
+      const err = document.getElementById('checkout-error');
+      const nameContainer = document.getElementById('cust-name-container');
 
-      try {
-        const data = await apiCall("processCheckout", payload, currentRequestId);
+      if (netPaid > cartTotal && cartTotal > 0) {
+        balEl.style.color = "#dc3545"; 
+        btn.disabled = true;
+        btn.textContent = "ENTER CHANGE GIVEN";
+        err.style.display = 'none';
+        nameContainer.classList.add('hidden');
+      } else {
+        balEl.style.color = balance > 0 ? "#d97706" : "#16a34a"; 
+        btn.disabled = state.cart.length === 0;
+        btn.textContent = "SUBMIT SALE";
         
-        if (!data.success) {
-          throw new Error(data.error || "Transaction failed at server.");
+        if (balance > 0 && cartTotal > 0) {
+          nameContainer.classList.remove('hidden');
+        } else {
+          nameContainer.classList.add('hidden');
         }
-        
-        // Success
-        document.getElementById('success-screen').style.display = 'flex';
-        currentRequestId = null; // Dump ID so next transaction creates a fresh one
-        
-      } catch (err) {
-        if (err.message === "SESSION_EXPIRED") return;
-        
-        // Leaves currentRequestId intact. Pushing the button again retries the identical request.
-        alert("Transaction failed to log: " + err.message + "\n\nTap RETRY SALE to try again.");
-        btn.disabled = false;
-        btn.innerText = "RETRY SALE";
       }
     }
 
-    function resetApp() {
-      cart = [];
-      renderCart();
+    async function handleCheckout() {
+      if (state.cart.length === 0) return;
+
+      const btn = document.getElementById('checkout-btn');
+      const err = document.getElementById('checkout-error');
+      err.style.display = 'none';
+      
+      const custName = document.getElementById('cust-name').value.trim();
+      const balance = round2(parseFloat(document.getElementById('sum-balance').textContent) || 0);
+
+      if (balance > 0 && custName === "") {
+        err.textContent = "Enter customer name for credit";
+        err.style.display = 'block';
+        return;
+      }
+
+      const payload = {
+        cart: state.cart.map(c => {
+          const itemPayload = { item: c.item, qty: c.qty };
+          if (state.user && state.user.role === 'admin' && c.priceOverride !== undefined && c.priceOverride !== "") {
+            itemPayload.priceOverride = c.priceOverride;
+          }
+          return itemPayload;
+        }),
+        cashIn: getVal('cash-in'),
+        momoIn: getVal('momo-in'),
+        bankIn: getVal('bank-in'),
+        cashOut: getVal('cash-out'),
+        momoOut: getVal('momo-out'),
+        customerType: document.getElementById('cust-type').value,
+        customerName: custName,
+        branch: getActiveBranch()
+      };
+
+      btn.disabled = true;
+      btn.textContent = "PROCESSING...";
+
+      try {
+        const data = await apiCall("processCheckout", payload, true);
+        
+        if (!data.success) {
+          err.textContent = data.error || "Transaction failed at server.";
+          err.style.display = 'block';
+          btn.disabled = false;
+          btn.textContent = "SUBMIT SALE";
+          return;
+        }
+
+        document.getElementById('success-trans-id').textContent = data.transId || "LOGGED";
+        document.getElementById('success-screen').style.display = 'flex';
+        
+        state.cart = [];
+        localStorage.removeItem('ana_pos_cart');
+        localStorage.removeItem('ana_pos_pending_req');
+        
+        fetchInventory();
+
+      } catch (e) {
+        if (e.message.includes("Session expired")) return;
+        err.textContent = "Network Error: " + e.message;
+        err.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = "NOT CONFIRMED, TAP TO RETRY";
+        
+        const pendingStr = localStorage.getItem('ana_pos_pending_req');
+        if (pendingStr) {
+          const pending = JSON.parse(pendingStr);
+          pending.uncertain = true;
+          localStorage.setItem('ana_pos_pending_req', JSON.stringify(pending));
+        }
+      }
+    }
+
+    function resetAppUI() {
+      renderCart(); 
+      document.getElementById('cust-type').value = "Unknown";
       document.getElementById('cust-name').value = "";
       document.getElementById('cash-in').value = "0";
       document.getElementById('momo-in').value = "0";
@@ -492,14 +869,40 @@
       document.getElementById('cash-out').value = "0";
       document.getElementById('momo-out').value = "0";
       
+      document.getElementById('checkout-error').style.display = 'none';
       document.getElementById('success-screen').style.display = 'none';
       
-      const btn = document.getElementById('checkout-btn');
-      btn.disabled = false;
-      btn.innerText = "SUBMIT SALE";
+      updatePaymentTotals();
+    }
+
+    // ==========================================
+    // EVENT BINDINGS
+    // ==========================================
+    function bindEvents() {
+      document.getElementById('pin-input').addEventListener('keyup', (e) => {
+        if (e.key === 'Enter') handleLogin();
+      });
+      document.getElementById('login-btn').addEventListener('click', () => handleLogin());
+      document.getElementById('logout-btn').addEventListener('click', () => handleLogout());
       
-      // Pull fresh stock counts for next checkout
-      fetchInventory();
+      document.getElementById('admin-branch-select').addEventListener('focus', handleInputFocus);
+      document.getElementById('admin-branch-select').addEventListener('change', () => fetchInventory());
+      
+      document.getElementById('inv-search').addEventListener('input', () => renderInventory());
+      document.getElementById('inv-category').addEventListener('change', () => renderInventory());
+      
+      document.getElementById('add-to-cart-btn').addEventListener('click', () => handleAddToCart());
+      
+      document.getElementById('cust-type').addEventListener('focus', handleInputFocus);
+      document.getElementById('cust-name').addEventListener('focus', handleInputFocus);
+
+      document.querySelectorAll('.pay-input').forEach(input => {
+        input.addEventListener('focus', handleInputFocus);
+        input.addEventListener('input', () => updatePaymentTotals());
+      });
+
+      document.getElementById('checkout-btn').addEventListener('click', () => handleCheckout());
+      document.getElementById('new-sale-btn').addEventListener('click', () => resetAppUI());
     }
   </script>
 </body>
