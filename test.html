@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ANA connection test</title>
+<style>
+  :root { --bg:#fff; --fg:#1a1a1a; --muted:#666; --card:#f4f4f6; --line:#d6d6dc; --accent:#1a6fd4; --ok:#157a3c; --bad:#b3261e; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#111214; --fg:#eee; --muted:#9a9aa3; --card:#1c1d21; --line:#33343a; --accent:#3d86e0; --ok:#4cc27a; --bad:#ff7a70; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0 auto; padding:16px; max-width:560px; font:16px/1.4 -apple-system, system-ui, "Segoe UI", Roboto, sans-serif; background:var(--bg); color:var(--fg); }
+  h1 { font-size:20px; margin:0 0 4px; }
+  p.sub { margin:0 0 12px; color:var(--muted); font-size:14px; }
+  label { display:block; font-size:13px; color:var(--muted); margin:12px 0 4px; }
+  input, select { width:100%; padding:12px; font-size:16px; border:1px solid var(--line); border-radius:10px; background:var(--card); color:var(--fg); }
+  button { width:100%; padding:13px; margin-top:10px; font-size:16px; font-weight:600; border:0; border-radius:10px; background:var(--accent); color:#fff; }
+  button.secondary { background:var(--card); color:var(--fg); border:1px solid var(--line); }
+  button:disabled { opacity:.5; }
+  #status { margin-top:16px; padding:10px 12px; border-radius:10px; background:var(--card); font-size:14px; }
+  .ok { color:var(--ok); }
+  .bad { color:var(--bad); }
+  pre { margin-top:12px; padding:12px; background:var(--card); border:1px solid var(--line); border-radius:10px; overflow-x:auto; font-size:13px; white-space:pre-wrap; word-break:break-word; }
+</style>
+</head>
+<body>
+  <h1>ANA connection test</h1>
+  <p class="sub">Checks that this phone can log in to the backend and read live inventory. Nothing is saved except the web app address, in this browser only.</p>
+
+  <label for="url">Web app URL (ends in /exec)</label>
+  <input id="url" type="url" inputmode="url" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="https://script.google.com/macros/s/.../exec">
+
+  <label for="pin">PIN</label>
+  <input id="pin" type="password" inputmode="numeric" autocomplete="off" placeholder="Test PIN">
+
+  <button id="btnLogin">1. Log in</button>
+
+  <label for="branch">Branch (admin logins must choose one)</label>
+  <select id="branch">
+    <option>AdjeiMess Hostel</option>
+    <option>Winta Hostel</option>
+  </select>
+  <button id="btnInv" class="secondary">2. Load live inventory</button>
+  <button id="btnOut" class="secondary">3. Log out</button>
+
+  <div id="status">Not logged in.</div>
+  <pre id="out" hidden></pre>
+
+<script>
+  var token = null;
+  var $ = function (id) { return document.getElementById(id); };
+
+  try { $("url").value = localStorage.getItem("ana_test_url") || ""; } catch (e) {}
+
+  function setStatus(msg, cls) {
+    var s = $("status");
+    s.textContent = msg;
+    s.className = cls || "";
+  }
+  function show(obj) {
+    var o = $("out");
+    o.hidden = false;
+    o.textContent = typeof obj === "string" ? obj : JSON.stringify(obj, null, 2);
+  }
+  function busy(on) {
+    ["btnLogin", "btnInv", "btnOut"].forEach(function (id) { $(id).disabled = on; });
+  }
+
+  async function call(action, payload) {
+    var url = $("url").value.trim();
+    if (!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(url)) {
+      throw new Error("The URL must look like https://script.google.com/macros/s/.../exec");
+    }
+    try { localStorage.setItem("ana_test_url", url); } catch (e) {}
+
+    // text/plain avoids the CORS preflight that Apps Script cannot answer; the body is still JSON.
+    var res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action: action, token: token, payload: payload || {} })
+    });
+    var text = await res.text();
+    try {
+      return JSON.parse(text);
+    } catch (e) {
+      throw new Error("The server did not return JSON. First 200 characters: " + text.slice(0, 200));
+    }
+  }
+
+  async function run(fn) {
+    busy(true);
+    try { await fn(); }
+    catch (e) { setStatus("Failed: " + e.message, "bad"); }
+    finally { busy(false); }
+  }
+
+  $("btnLogin").onclick = function () {
+    run(async function () {
+      var data = await call("login", { pin: $("pin").value.trim() });
+      if (data.success) {
+        token = data.token;
+        $("pin").value = "";
+        setStatus("Logged in as " + data.user.name + " (" + data.user.role + ", branch: " + data.user.branch + ").", "ok");
+        show({ success: true, user: data.user, token: token.slice(0, 6) + "..." });
+      } else {
+        setStatus("Login refused: " + data.error, "bad");
+        show(data);
+      }
+    });
+  };
+
+  $("btnInv").onclick = function () {
+    run(async function () {
+      if (!token) { setStatus("Log in first.", "bad"); return; }
+      var data = await call("getLiveInventory", { branch: $("branch").value });
+      if (data.success) {
+        setStatus("Inventory loaded for " + data.branch + ": " + data.inventory.length + " items, " + data.skippedCount + " hidden for missing price or cost.", "ok");
+        show({ branch: data.branch, itemCount: data.inventory.length, skippedCount: data.skippedCount, firstFiveItems: data.inventory.slice(0, 5) });
+      } else {
+        if (data.sessionExpired) { token = null; }
+        setStatus("Refused: " + data.error, "bad");
+        show(data);
+      }
+    });
+  };
+
+  $("btnOut").onclick = function () {
+    run(async function () {
+      var data = await call("logout", {});
+      token = null;
+      setStatus(data.success ? "Logged out." : "Logout reply: " + (data.error || "unknown"), data.success ? "ok" : "bad");
+      show(data);
+    });
+  };
+</script>
+</body>
+</html>
