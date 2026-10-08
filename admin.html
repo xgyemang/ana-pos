@@ -49,13 +49,14 @@
     .hidden { display: none !important; }
 
     /* Tabs Navigation */
-    .tab-nav { display: flex; gap: 10px; margin-bottom: 15px; }
-    .tab-nav button { margin: 0; background: #444; flex: 1; padding: 12px; font-size: 0.9rem; }
+    .tab-nav { display: flex; gap: 10px; margin-bottom: 15px; overflow-x: auto; padding-bottom: 5px; }
+    .tab-nav button { margin: 0; background: #444; flex: 0 0 auto; min-width: 90px; padding: 12px; font-size: 0.9rem; white-space: nowrap; }
     .tab-nav button.active { background: #007bff; }
 
     /* Inventory Selection Styles */
     .inventory-list { max-height: 200px; overflow-y: auto; border: 1px solid #ccc; border-radius: 6px; margin-top: 10px; background: #fafafa; }
     .inv-item { padding: 12px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+    .inv-item.disabled { opacity: 0.5; cursor: not-allowed; }
     .inv-item:last-child { border-bottom: none; }
     .inv-item-details { display: flex; flex-direction: column; }
     .inv-item-name { font-weight: 600; font-size: 1rem; }
@@ -73,6 +74,15 @@
     
     #success-details { margin-top: 15px; font-size: 0.9rem; color: #eee; width: 90%; max-width: 400px; text-align: left; background: #222; padding: 10px; border-radius: 6px; }
     
+    /* Shared Fix C */
+    #success-trans-id {
+      margin-bottom: 10px; 
+      font-size: 1.2rem; 
+      font-family: monospace; 
+      color: #4ade80;
+      word-break: break-all;
+    }
+
     /* Page Lock Overlay */
     .busy-overlay { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 99999; background: transparent; display: none; }
   </style>
@@ -109,6 +119,14 @@
   <div class="tab-nav">
     <button id="nav-restock" class="active">Restock</button>
     <button id="nav-expense">Expense</button>
+    <button id="nav-money">Money</button>
+    <button id="nav-debtors">Debtors</button>
+    <button id="nav-damaged">Damaged</button>
+    <button id="nav-adjust">Adjust</button>
+    <button id="nav-transfer">Transfer</button>
+    <button id="nav-kits">Kits</button>
+    <button id="nav-additem">Add item</button>
+    <button id="nav-void">Void</button>
   </div>
 
   <!-- ==========================================
@@ -191,23 +209,353 @@
         <option value="Other">Other</option>
       </select>
 
-      <label>Amount</label>
-      <input type="number" id="ex-amount" class="ex-input" value="" placeholder="0" min="0" step="0.01">
-
-      <label>Paid From Wallet</label>
-      <select id="ex-wallet" class="ex-input">
-        <option value="Cash">Cash</option>
-        <option value="MoMo">MoMo</option>
-        <option value="Bank">Bank</option>
-      </select>
+      <label style="margin-top: 15px; border-bottom: 1px solid #eee; padding-bottom: 5px;">Split Across Wallets</label>
+      <div class="grid-2" style="margin-top: 10px;">
+        <div><label>Cash</label><input type="number" id="ex-cash" class="ex-input ex-pay-input" value="" placeholder="0" min="0" step="0.01"></div>
+        <div><label>MoMo</label><input type="number" id="ex-momo" class="ex-input ex-pay-input" value="" placeholder="0" min="0" step="0.01"></div>
+      </div>
+      <label>Bank</label><input type="number" id="ex-bank" class="ex-input ex-pay-input" value="" placeholder="0" min="0" step="0.01">
 
       <label>Notes (Optional)</label>
       <textarea id="ex-notes" class="ex-input" placeholder="Expense details..."></textarea>
       
       <div id="ex-error" class="error" style="margin-top:15px; font-size: 0.9rem;"></div>
+      
+      <div id="ex-progress-container" class="hidden" style="margin-top:15px; padding:10px; background:#e0f0ff; border-radius:6px; border:1px solid #007bff; text-align:center;">
+        <div id="ex-progress-text" style="font-weight:bold; font-size:0.9rem; margin-bottom:10px; color:#0056b3;"></div>
+        <button id="btn-stop-expense" style="background:#dc3545; margin-top:0; width:auto; padding:6px 12px;">Stop (recorded parts stay)</button>
+      </div>
+
       <div style="display: flex; align-items: center; gap: 10px; margin-top: 15px; flex-wrap: wrap;">
         <button id="btn-submit-expense" disabled style="margin-top: 0; flex: 0 0 auto;">SUBMIT EXPENSE</button>
         <span id="ex-submit-branch" style="font-size: 0.85rem; color: #666; font-weight: bold; flex: 1;"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       MONEY TAB
+       ========================================== -->
+  <div id="tab-money" class="hidden">
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h2 style="border:none; margin:0;">TREASURY</h2>
+        <button id="btn-refresh-treasury" style="width:auto; margin:0; padding:6px 12px; font-size:0.8rem; background:#007bff; color:#fff;">Refresh</button>
+      </div>
+      <div id="treasury-content" style="margin-top:10px;">Loading...</div>
+    </div>
+
+    <div class="card">
+      <h2>TRANSFER FUNDS</h2>
+      <div class="grid-2">
+        <div>
+          <label>From wallet</label>
+          <select id="mon-from" class="mon-input">
+            <option value="Cash">Cash</option>
+            <option value="MoMo">MoMo</option>
+            <option value="Bank">Bank</option>
+          </select>
+        </div>
+        <div>
+          <label>To wallet</label>
+          <select id="mon-to" class="mon-input">
+            <option value="Cash">Cash</option>
+            <option value="MoMo">MoMo</option>
+            <option value="Bank">Bank</option>
+          </select>
+        </div>
+      </div>
+      <label>Amount</label>
+      <input type="number" id="mon-amount" class="mon-input" placeholder="0" min="0" step="0.01">
+      <label>Notes (Optional)</label>
+      <input type="text" id="mon-notes" class="mon-input">
+      
+      <div id="mon-error" class="error" style="margin-top:15px; font-size: 0.9rem;"></div>
+      
+      <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 15px;">
+        <span id="mon-reason" style="color: #dc3545; font-size: 0.85rem; font-weight: bold; text-align:center;">Enter amount</span>
+        <button id="btn-mon-deposit" disabled style="margin-top:0;">DEPOSIT</button>
+        <button id="btn-mon-withdraw" disabled style="margin-top:0;">OWNER WITHDRAWAL</button>
+        <button id="btn-mon-move" disabled style="margin-top:0;">MOVE BETWEEN WALLETS</button>
+        <div style="font-size:0.8rem; color:#666; text-align:center; margin-top:10px;">Deposit uses the To wallet, Withdrawal uses the From wallet, Move uses both.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       DEBTORS TAB
+       ========================================== -->
+  <div id="tab-debtors" class="hidden">
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h2 style="border:none; margin:0;">DEBTORS</h2>
+        <button id="btn-refresh-debtors" style="width:auto; margin:0; padding:6px 12px; font-size:0.8rem; background:#007bff; color:#fff;">Refresh</button>
+      </div>
+      <input type="search" id="debtor-search" class="dh-input" placeholder="Search debtors..." style="margin-top:10px; margin-bottom:10px;">
+      <div id="debtor-list" class="inventory-list">Loading...</div>
+    </div>
+    
+    <div id="debtor-history-card" class="card hidden">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h2 id="dh-name" style="margin:0; border:none; color:#007bff;">Debtor</h2>
+        <div id="dh-balance" style="font-weight:bold; font-size:1.4rem; color:#dc3545;">0.00</div>
+      </div>
+      <div id="dh-last-credit" style="font-size:0.8rem; color:#666; margin-bottom:15px; padding-bottom:10px; border-bottom:1px solid #eee;"></div>
+      
+      <div style="margin-bottom:20px;">
+        <label>Pay Amount</label>
+        <input type="number" id="dh-pay-amount" class="dh-input" placeholder="0" min="0" step="0.01">
+        <label>Wallet</label>
+        <select id="dh-pay-wallet" class="dh-input">
+          <option value="Cash">Cash</option>
+          <option value="MoMo">MoMo</option>
+          <option value="Bank">Bank</option>
+        </select>
+        <label>Notes (Optional)</label>
+        <input type="text" id="dh-pay-notes" class="dh-input">
+        
+        <div id="dh-error" class="error" style="margin-top:10px;"></div>
+        
+        <div style="display:flex; align-items:center; gap:10px; margin-top:10px; flex-wrap:wrap;">
+          <button id="btn-submit-repay" disabled style="margin-top:0; flex:0 0 auto;">SUBMIT REPAYMENT</button>
+          <span id="dh-pay-reason" style="color:#dc3545; font-size:0.85rem; font-weight:bold;">Enter amount</span>
+        </div>
+      </div>
+
+      <h3 style="font-size:1rem; margin-bottom:10px;">History</h3>
+      <div id="dh-rows" style="max-height:300px; overflow-y:auto; font-size:0.85rem; border-top:1px solid #eee; padding-top:10px;"></div>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       DAMAGED TAB
+       ========================================== -->
+  <div id="tab-damaged" class="hidden">
+    <div class="card">
+      <h2>SELECT ITEM</h2>
+      <input type="search" id="dmg-inv-search" placeholder="Search product..." class="dmg-input">
+      <div class="inventory-list" id="dmg-inventory-list"></div>
+    </div>
+    <div class="card">
+      <h2>DETAILS</h2>
+      <div id="dmg-selected-item" style="font-weight:bold; color:#007bff; margin-bottom:10px;">None selected</div>
+      <label>Reason</label>
+      <select id="dmg-reason" class="dmg-input">
+        <option value="Damaged">Damaged</option>
+        <option value="Lost">Lost</option>
+        <option value="Other">Other</option>
+      </select>
+      <label>Quantity</label>
+      <input type="number" id="dmg-qty" class="dmg-input" min="1" step="1">
+      <label>Notes (Optional)</label>
+      <input type="text" id="dmg-notes" class="dmg-input">
+      
+      <div id="dmg-error" class="error" style="margin-top:10px;"></div>
+      <div style="display:flex; align-items:center; gap:10px; margin-top:10px; flex-wrap:wrap;">
+        <button id="btn-submit-damaged" disabled style="margin-top:0; flex:0 0 auto;">SUBMIT DAMAGED/LOST</button>
+        <span id="dmg-reason-text" style="color:#dc3545; font-size:0.85rem; font-weight:bold; flex:1;">Select an item</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       ADJUST TAB
+       ========================================== -->
+  <div id="tab-adjust" class="hidden">
+    <div class="card">
+      <h2>SELECT ITEM</h2>
+      <input type="search" id="adj-inv-search" placeholder="Search product..." class="adj-input">
+      <div class="inventory-list" id="adj-inventory-list"></div>
+    </div>
+    <div class="card">
+      <h2>ADJUSTMENT DETAILS</h2>
+      <div id="adj-selected-item" style="font-weight:bold; color:#007bff; margin-bottom:10px;">None selected</div>
+      
+      <label>Mode</label>
+      <select id="adj-mode" class="adj-input">
+        <option value="counted">Counted (Enter actual stock)</option>
+        <option value="manual">Manual (Increase/Decrease)</option>
+      </select>
+      
+      <div id="adj-counted-block">
+        <label>Actual Stock Counted</label>
+        <input type="number" id="adj-counted" class="adj-input" min="0" step="1">
+      </div>
+      
+      <div id="adj-manual-block" class="hidden">
+        <label>Direction</label>
+        <select id="adj-dir" class="adj-input">
+          <option value="increase">Increase</option>
+          <option value="decrease">Decrease</option>
+        </select>
+        <label>Quantity to Adjust</label>
+        <input type="number" id="adj-qty" class="adj-input" min="1" step="1">
+      </div>
+      
+      <label>Reason</label>
+      <select id="adj-reason" class="adj-input">
+        <option value="Recount">Recount</option>
+        <option value="Found stock">Found stock</option>
+        <option value="Counting error">Counting error</option>
+        <option value="Other">Other</option>
+      </select>
+      <label>Notes (Optional)</label>
+      <input type="text" id="adj-notes" class="adj-input">
+      
+      <div id="adj-error" class="error" style="margin-top:10px;"></div>
+      <div style="display:flex; align-items:center; gap:10px; margin-top:10px; flex-wrap:wrap;">
+        <button id="btn-submit-adjust" disabled style="margin-top:0; flex:0 0 auto;">SUBMIT ADJUSTMENT</button>
+        <span id="adj-reason-text" style="color:#dc3545; font-size:0.85rem; font-weight:bold; flex:1;">Select an item</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       TRANSFER TAB
+       ========================================== -->
+  <div id="tab-transfer" class="hidden">
+    <div class="card">
+      <h2>SELECT ITEM</h2>
+      <input type="search" id="tr-inv-search" placeholder="Search product..." class="tr-input">
+      <div class="inventory-list" id="tr-inventory-list"></div>
+    </div>
+    <div class="card">
+      <h2>TRANSFER DETAILS</h2>
+      <div id="tr-selected-item" style="font-weight:bold; color:#007bff; margin-bottom:10px;">None selected</div>
+      <div class="grid-2">
+        <div>
+          <label>Source Branch</label>
+          <select id="tr-source" class="tr-input">
+            <option value="AdjeiMess Hostel">AdjeiMess</option>
+            <option value="Winta Hostel">Winta</option>
+          </select>
+        </div>
+        <div>
+          <label>Dest Branch</label>
+          <select id="tr-dest" class="tr-input">
+            <option value="Winta Hostel">Winta</option>
+            <option value="AdjeiMess Hostel">AdjeiMess</option>
+          </select>
+        </div>
+      </div>
+      <label>Quantity</label>
+      <input type="number" id="tr-qty" class="tr-input" min="1" step="1">
+      <label>Notes (Optional)</label>
+      <input type="text" id="tr-notes" class="tr-input">
+      
+      <div id="tr-error" class="error" style="margin-top:10px;"></div>
+      <div style="display:flex; align-items:center; gap:10px; margin-top:10px; flex-wrap:wrap;">
+        <button id="btn-submit-transfer" disabled style="margin-top:0; flex:0 0 auto;">SUBMIT TRANSFER</button>
+        <span id="tr-reason-text" style="color:#dc3545; font-size:0.85rem; font-weight:bold; flex:1;">Select an item</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       KITS TAB
+       ========================================== -->
+  <div id="tab-kits" class="hidden">
+    <div class="card">
+      <h2>KIT CONVERSION</h2>
+      <div id="kit-loading" style="color:#666; text-align:center;">Loading recipes...</div>
+      <div id="kit-content" class="hidden">
+        <label>Select Kit</label>
+        <select id="kit-select" class="kit-input"></select>
+        
+        <label>Mode</label>
+        <select id="kit-mode" class="kit-input">
+          <option value="rebuild">Rebuild (Create Kit)</option>
+          <option value="breakdown">Breakdown (Destroy Kit)</option>
+        </select>
+        
+        <label>Quantity</label>
+        <input type="number" id="kit-qty" class="kit-input" min="1" step="1" value="1">
+        
+        <div style="margin-top:15px; padding:10px; background:#fafafa; border:1px solid #ddd; border-radius:6px;">
+          <strong style="font-size:0.9rem;">Parts Requirement (at <span id="kit-branch-label"></span>)</strong>
+          <div id="kit-parts-list" style="margin-top:5px; font-size:0.85rem;"></div>
+        </div>
+        
+        <label>Notes (Optional)</label>
+        <input type="text" id="kit-notes" class="kit-input">
+        
+        <div id="kit-error" class="error" style="margin-top:10px;"></div>
+        <div style="display:flex; align-items:center; gap:10px; margin-top:10px; flex-wrap:wrap;">
+          <button id="btn-submit-kit" disabled style="margin-top:0; flex:0 0 auto;">SUBMIT CONVERSION</button>
+          <span id="kit-reason-text" style="color:#dc3545; font-size:0.85rem; font-weight:bold; flex:1;">Loading stock...</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       ADD ITEM TAB
+       ========================================== -->
+  <div id="tab-additem" class="hidden">
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h2 style="border:none; margin:0;">ADD NEW ITEM</h2>
+      </div>
+      <div id="additem-error" class="error" style="margin-top:10px;"></div>
+      
+      <div id="additem-form">
+        <label>Item Name</label>
+        <input type="text" id="ai-name" class="ai-input" placeholder="Enter item name (max 80 chars)" maxlength="80">
+        
+        <label>Category</label>
+        <select id="ai-category" class="ai-input">
+          <option value="">Loading...</option>
+        </select>
+        
+        <div class="grid-2">
+          <div>
+            <label>Selling Price</label>
+            <input type="number" id="ai-price" class="ai-input" placeholder="0" min="0" step="0.01">
+          </div>
+          <div>
+            <label>Unit Cost</label>
+            <input type="number" id="ai-cost" class="ai-input" placeholder="0" min="0" step="0.01">
+          </div>
+        </div>
+        
+        <div style="display:flex; align-items:center; gap:10px; margin-top:15px; flex-wrap:wrap;">
+          <button id="btn-submit-additem" disabled style="margin-top:0; flex:0 0 auto;">ADD ITEM</button>
+          <span id="ai-reason-text" style="color:#dc3545; font-size:0.85rem; font-weight:bold; flex:1;">Enter item name</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       VOID TAB
+       ========================================== -->
+  <div id="tab-void" class="hidden">
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h2 style="border:none; margin:0;">RECENT TRANSACTIONS</h2>
+        <button id="btn-refresh-void" style="width:auto; margin:0; padding:6px 12px; font-size:0.8rem; background:#007bff; color:#fff;">Refresh</button>
+      </div>
+      <div id="void-list" class="inventory-list" style="margin-bottom: 10px; max-height:300px;">
+        <div style="padding:15px; text-align:center; color:#666;">Loading...</div>
+      </div>
+      <div style="text-align: center;">
+         <button id="btn-void-load-more" class="hidden" style="width:auto; padding:6px 12px; font-size:0.8rem; background:#6c757d; margin-top:0;">Load more</button>
+      </div>
+    </div>
+    
+    <div id="void-action-card" class="card hidden">
+      <h2 id="void-ref-title" style="color:#dc3545; font-family:monospace; margin-bottom:5px;"></h2>
+      <div id="void-ref-date" style="font-size:0.85rem; color:#666; margin-bottom:10px;"></div>
+      <div id="void-ref-rows" style="font-size:0.85rem; border-top:1px solid #eee; border-bottom:1px solid #eee; padding:10px 0; margin-bottom:15px; max-height:200px; overflow-y:auto;"></div>
+      
+      <label>Reason for voiding (3-200 chars)</label>
+      <textarea id="void-reason" class="void-input" placeholder="Why is this being voided?" maxlength="200"></textarea>
+      
+      <div id="void-error" class="error" style="margin-top:10px;"></div>
+      
+      <div style="display:flex; flex-direction:column; gap:10px; margin-top:10px;">
+        <span id="void-reason-text" style="color:#dc3545; font-size:0.85rem; font-weight:bold; text-align:center;">Enter reason</span>
+        <button id="btn-submit-void" disabled style="background:#dc3545; margin-top:0;">VOID TRANSACTION</button>
       </div>
     </div>
   </div>
@@ -216,12 +564,12 @@
   <div id="success-screen" class="success-overlay">
     <h1>SUCCESS</h1>
     <p style="margin-bottom: 5px; font-size: 1.1rem; color: #ccc;">Transaction logged to ledger.</p>
-    <p id="success-trans-id" style="margin-bottom: 10px; font-size: 1.5rem; font-family: monospace; color: #4ade80;"></p>
+    <div id="success-trans-id"></div>
     <div id="success-details"></div>
     <button style="width: 80%; max-width: 300px; background: #007bff; padding: 15px; border-radius: 8px; font-size: 1.2rem; margin-top:25px;" id="btn-dismiss-success">DISMISS</button>
   </div>
 
-  <script>
+<script>
     // ==========================================
     // CONFIGURATION & GLOBAL STATE
     // ==========================================
@@ -233,9 +581,31 @@
       token: null,
       currentTab: 'restock',
       inventory: [],
+      liveStockCache: {}, 
+      kits: [],
       restockLines: [],
+      treasury: {},
+      debtors: [],
+      currentDebtor: "",
+      currentDebtorBalance: 0,
+      dmgItem: "",
+      adjItem: "",
+      trItem: "",
+      voidList: [],
+      voidLimit: 30,
+      voidRef: "",
       isSubmittingRestock: false,
-      isSubmittingExpense: false
+      isSubmittingExpense: false,
+      expenseStopRequested: false,
+      isSubmittingMoney: false,
+      isSubmittingRepay: false,
+      isSubmittingDamaged: false,
+      isSubmittingAdjust: false,
+      isSubmittingTransfer: false,
+      isSubmittingKit: false,
+      isSubmittingAddItem: false,
+      isSubmittingVoid: false,
+      splitStatus: null
     };
 
     try {
@@ -255,16 +625,20 @@
         document.activeElement.blur();
       }
       document.getElementById('busy-overlay').style.display = 'block';
-      document.getElementById('tab-restock').inert = true;
-      document.getElementById('tab-expense').inert = true;
+      Object.keys(TABS).forEach(k => {
+        const el = document.getElementById(TABS[k].containerId);
+        if (el) el.inert = true;
+      });
       document.querySelector('.header-bar').inert = true;
       document.querySelector('.tab-nav').inert = true;
     }
     
     function unlockPage() {
       document.getElementById('busy-overlay').style.display = 'none';
-      document.getElementById('tab-restock').inert = false;
-      document.getElementById('tab-expense').inert = false;
+      Object.keys(TABS).forEach(k => {
+        const el = document.getElementById(TABS[k].containerId);
+        if (el) el.inert = false;
+      });
       document.querySelector('.header-bar').inert = false;
       document.querySelector('.tab-nav').inert = false;
     }
@@ -286,6 +660,75 @@
         containerId: 'tab-expense',
         btnId: 'nav-expense',
         init: () => validateExpenseForm()
+      },
+      money: {
+        containerId: 'tab-money',
+        btnId: 'nav-money',
+        init: () => {
+          fetchTreasury(false);
+          validateMoneyForm();
+        }
+      },
+      debtors: {
+        containerId: 'tab-debtors',
+        btnId: 'nav-debtors',
+        init: () => {
+          fetchDebtors(false);
+        }
+      },
+      damaged: {
+        containerId: 'tab-damaged',
+        btnId: 'nav-damaged',
+        init: () => {
+          if (state.inventory.length === 0) fetchItemList();
+          else renderInventoryList('dmg', 'dmgItem');
+          fetchLiveStockCache();
+          validateDamagedForm();
+        }
+      },
+      adjust: {
+        containerId: 'tab-adjust',
+        btnId: 'nav-adjust',
+        init: () => {
+          if (state.inventory.length === 0) fetchItemList();
+          else renderInventoryList('adj', 'adjItem');
+          fetchLiveStockCache();
+          validateAdjustForm();
+        }
+      },
+      transfer: {
+        containerId: 'tab-transfer',
+        btnId: 'nav-transfer',
+        init: () => {
+          if (state.inventory.length === 0) fetchItemList();
+          else renderInventoryList('tr', 'trItem');
+          fetchLiveStockCache();
+          validateTransferForm();
+        }
+      },
+      kits: {
+        containerId: 'tab-kits',
+        btnId: 'nav-kits',
+        init: () => {
+          fetchKitRecipes();
+          fetchLiveStockCache();
+        }
+      },
+      additem: {
+        containerId: 'tab-additem',
+        btnId: 'nav-additem',
+        init: () => {
+          if (state.inventory.length === 0) fetchItemList();
+          fetchCategories();
+          validateAddItemForm();
+        }
+      },
+      void: {
+        containerId: 'tab-void',
+        btnId: 'nav-void',
+        init: () => {
+          fetchRecentTransactions();
+        }
       }
     };
 
@@ -302,9 +745,23 @@
     }
 
     // ==========================================
-    // CORE API WRAPPER
+    // CORE API WRAPPER & UTILS
     // ==========================================
-    async function apiCall(action, payload = {}, pendingKey = null, summaryStr = "") {
+    function getPendingKeys() {
+      const keys = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('ana_admin_pending_')) keys.push(k);
+      }
+      return keys;
+    }
+
+    function getVal(id) {
+      const val = parseFloat(document.getElementById(id).value);
+      return isNaN(val) ? 0 : val;
+    }
+
+    async function apiCall(action, payload = {}, pendingKey = null, summaryStr = "", silentFetch = false) {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30000); 
       
@@ -349,7 +806,7 @@
         }
         
         if (data.sessionExpired) {
-          handleLogout(true);
+          if (!silentFetch) handleLogout(true);
           throw new Error("Session expired. Please login again.");
         }
         return data;
@@ -389,7 +846,8 @@
       return null;
     }
 
-    function checkPendingWarning(keys) {
+    function checkPendingWarning() {
+      const keys = getPendingKeys();
       const record = getUnacknowledgedPending(keys);
       if (record) {
         const p = record.pending;
@@ -403,13 +861,15 @@
       return true;
     }
 
-    function handleInputFocus(e, keys) {
+    function handleInputFocus(e) {
+      const keys = getPendingKeys();
       const record = getUnacknowledgedPending(keys);
       if (record) {
         const p = record.pending;
         const msg = p.summary ? ` (${p.summary})` : '';
         if (!confirm(`Your last submission${msg} was not confirmed and may already be recorded. Check before continuing.`)) {
           e.target.blur();
+          return;
         } else {
           p.acknowledged = true;
           localStorage.setItem(record.key, JSON.stringify(p));
@@ -417,16 +877,83 @@
       }
     }
 
-    function getActivePendingKey() {
-      return state.currentTab === 'restock' ? 'ana_admin_pending_restock' : 'ana_admin_pending_expense';
-    }
-
     function updateBranchLabels() {
       const val = document.getElementById('admin-branch-select').value;
-      const rsLabel = document.getElementById('rs-submit-branch');
-      if (rsLabel) rsLabel.textContent = `Branch: ${val}`;
-      const exLabel = document.getElementById('ex-submit-branch');
-      if (exLabel) exLabel.textContent = `Branch: ${val}`;
+      const labels = [
+        document.getElementById('rs-submit-branch'),
+        document.getElementById('ex-submit-branch'),
+        document.getElementById('kit-branch-label')
+      ];
+      labels.forEach(l => { if(l) l.textContent = (l.id === 'kit-branch-label') ? val : `Branch: ${val}`; });
+      const trSource = document.getElementById('tr-source');
+      if (trSource) trSource.value = val;
+    }
+
+    // ==========================================
+    // TREASURY & SOFT WALLET WARNING
+    // ==========================================
+    async function fetchTreasury(isSilent = false) {
+      const container = document.getElementById('treasury-content');
+      try {
+        const data = await apiCall("getTreasury", {}, null, "", isSilent);
+        container.textContent = '';
+        if (data.success) {
+          state.treasury = data;
+          const grid = document.createElement('div');
+          grid.className = "grid-2";
+          
+          const makeStat = (label, val) => {
+            const d = document.createElement('div');
+            const s = document.createElement('strong');
+            s.textContent = label + ": ";
+            d.appendChild(s);
+            d.appendChild(document.createTextNode(val.toFixed(2)));
+            return d;
+          };
+          grid.appendChild(makeStat("Cash", data.cash));
+          grid.appendChild(makeStat("MoMo", data.momo));
+          grid.appendChild(makeStat("Bank", data.bank));
+          grid.appendChild(makeStat("Total", data.total));
+          container.appendChild(grid);
+
+          const gl = document.createElement('div');
+          gl.style.cssText = "font-size:0.75rem; color:#888; margin-top:5px;";
+          gl.textContent = "Go Live: " + data.goLive;
+          container.appendChild(gl);
+          return true;
+        } else {
+          const err = document.createElement('span');
+          err.style.color = "#dc3545";
+          err.textContent = data.error || "Failed to load treasury.";
+          container.appendChild(err);
+          return false;
+        }
+      } catch(e) {
+        container.textContent = '';
+        const err = document.createElement('span');
+        err.style.color = "#dc3545";
+        err.textContent = "Error: " + e.message;
+        container.appendChild(err);
+        return false;
+      }
+    }
+
+    async function runSoftWalletWarning(deductions) {
+      const success = await fetchTreasury(true);
+      if (!success) return true; // Fail silently, allow proceed
+      
+      for (let w in deductions) {
+        const amt = deductions[w];
+        if (amt > 0) {
+          const current = state.treasury[w.toLowerCase()] || 0;
+          if (current - amt < 0) {
+            if (!confirm(`This will take ${w} below zero. Continue?`)) {
+              return false;
+            }
+          }
+        }
+      }
+      return true;
     }
 
     // ==========================================
@@ -456,7 +983,7 @@
         
         if (data.user.role !== 'admin') {
           state.token = data.token; 
-          try { await apiCall("logout"); } catch(e) {}
+          try { await apiCall("logout", {}, null, "", true); } catch(e) {}
           state.token = null;
           throw new Error("Admin only. Access denied.");
         }
@@ -485,11 +1012,12 @@
 
     async function handleLogout(isExpiry = false, forceMsg = null) {
       if (!isExpiry && !forceMsg) {
+        if (!checkPendingWarning()) return;
         if (!confirm("Are you sure you want to logout? Unsubmitted data will be lost.")) return;
       }
 
       if (state.token && !forceMsg) {
-        try { await apiCall("logout"); } catch(e) {} 
+        try { await apiCall("logout", {}, null, "", true); } catch(e) {} 
       }
       
       state.token = null;
@@ -498,9 +1026,45 @@
       localStorage.removeItem('ana_admin_user');
 
       if (!isExpiry && !forceMsg) {
+        getPendingKeys().forEach(k => localStorage.removeItem(k));
         state.restockLines = [];
         resetRestockForm();
         resetExpenseForm();
+        document.getElementById('mon-amount').value = "";
+        document.getElementById('mon-notes').value = "";
+        document.getElementById('dh-pay-amount').value = "";
+        document.getElementById('dh-pay-notes').value = "";
+        document.getElementById('debtor-search').value = "";
+        document.getElementById('debtor-history-card').classList.add('hidden');
+        
+        state.dmgItem = "";
+        state.adjItem = "";
+        state.trItem = "";
+        document.getElementById('dmg-selected-item').textContent = "None selected";
+        document.getElementById('adj-selected-item').textContent = "None selected";
+        document.getElementById('tr-selected-item').textContent = "None selected";
+        document.getElementById('dmg-qty').value = ""; document.getElementById('dmg-notes').value = "";
+        document.getElementById('adj-counted').value = ""; document.getElementById('adj-qty').value = ""; document.getElementById('adj-notes').value = "";
+        document.getElementById('tr-qty').value = ""; document.getElementById('tr-notes').value = "";
+        document.getElementById('kit-qty').value = "1"; document.getElementById('kit-notes').value = "";
+        const partsList = document.getElementById('kit-parts-list');
+        if (partsList) partsList.textContent = "";
+
+        // Reset Add Item and Void tabs
+        state.voidRef = "";
+        state.voidList = [];
+        state.voidLimit = 30;
+        document.getElementById('ai-name').value = "";
+        const aiCat = document.getElementById('ai-category');
+        if (aiCat) aiCat.value = "";
+        document.getElementById('ai-price').value = "";
+        document.getElementById('ai-cost').value = "";
+        document.getElementById('additem-error').style.display = "none";
+        document.getElementById('void-action-card').classList.add('hidden');
+        document.getElementById('void-reason').value = "";
+        document.getElementById('void-error').style.display = 'none';
+        const vl = document.getElementById('void-list');
+        if (vl) vl.textContent = '';
       }
       
       const errDiv = document.getElementById('login-error');
@@ -515,28 +1079,56 @@
     }
 
     // ==========================================
-    // GET ITEM LIST (RESTOCK TAB)
+    // SHARED INVENTORY & LIVE STOCK FETCH
     // ==========================================
     async function fetchItemList() {
-      const listDiv = document.getElementById('rs-inventory-list');
-      listDiv.innerHTML = '<div style="padding:15px; text-align:center; color:#666;">Loading items...</div>';
+      const loadMsg = (prefix) => {
+        const div = document.getElementById(`${prefix}-inventory-list`);
+        if(div) {
+          div.textContent = '';
+          const m = document.createElement('div');
+          m.style.cssText = "padding:15px; text-align:center; color:#666;";
+          m.textContent = "Loading items...";
+          div.appendChild(m);
+        }
+      };
+      
+      loadMsg('rs');
+      if (!document.getElementById('tab-damaged').classList.contains('hidden')) loadMsg('dmg');
+      if (!document.getElementById('tab-adjust').classList.contains('hidden')) loadMsg('adj');
+      if (!document.getElementById('tab-transfer').classList.contains('hidden')) loadMsg('tr');
+
       try {
         const data = await apiCall("getItemList", {});
         if (data.success && data.items) {
           state.inventory = data.items;
           populateRsCategories();
           renderRsInventory();
+          if (!document.getElementById('tab-damaged').classList.contains('hidden')) renderInventoryList('dmg', 'dmgItem');
+          if (!document.getElementById('tab-adjust').classList.contains('hidden')) renderInventoryList('adj', 'adjItem');
+          if (!document.getElementById('tab-transfer').classList.contains('hidden')) renderInventoryList('tr', 'trItem');
         } else {
-          showRsInvError(data.error || "Failed to load items.");
+          const eMsg = data.error || "Failed to load items.";
+          showRsInvError(eMsg, 'rs');
+          if (!document.getElementById('tab-damaged').classList.contains('hidden')) showRsInvError(eMsg, 'dmg');
+          if (!document.getElementById('tab-adjust').classList.contains('hidden')) showRsInvError(eMsg, 'adj');
+          if (!document.getElementById('tab-transfer').classList.contains('hidden')) showRsInvError(eMsg, 'tr');
         }
       } catch (err) {
-        if (!err.message.includes("Session expired")) showRsInvError(err.message);
+        if (!err.message.includes("Session expired")) {
+          const eMsg = err.message;
+          showRsInvError(eMsg, 'rs');
+          if (!document.getElementById('tab-damaged').classList.contains('hidden')) showRsInvError(eMsg, 'dmg');
+          if (!document.getElementById('tab-adjust').classList.contains('hidden')) showRsInvError(eMsg, 'adj');
+          if (!document.getElementById('tab-transfer').classList.contains('hidden')) showRsInvError(eMsg, 'tr');
+        }
       }
     }
 
-    function showRsInvError(msg) {
-      const listDiv = document.getElementById('rs-inventory-list');
-      listDiv.innerHTML = '';
+    function showRsInvError(msg, prefix = 'rs') {
+      const listDiv = document.getElementById(`${prefix}-inventory-list`);
+      if (!listDiv) return;
+      listDiv.textContent = '';
       const wrap = document.createElement('div');
       wrap.style.cssText = "padding:15px; text-align:center; color:#dc3545;";
       const textNode = document.createElement('span');
@@ -552,39 +1144,26 @@
       listDiv.appendChild(wrap);
     }
 
-    function populateRsCategories() {
-      const catSelect = document.getElementById('rs-inv-category');
-      const currentVal = catSelect.value;
-      const cats = new Set(state.inventory.map(i => i.category).filter(Boolean));
-      catSelect.innerHTML = '';
-      
-      const allOpt = document.createElement('option');
-      allOpt.value = "All";
-      allOpt.textContent = "All Categories";
-      catSelect.appendChild(allOpt);
-
-      Array.from(cats).sort().forEach(cat => {
-        const opt = document.createElement('option');
-        opt.value = cat;
-        opt.textContent = cat;
-        catSelect.appendChild(opt);
-      });
-      if (cats.has(currentVal)) catSelect.value = currentVal;
+    async function fetchLiveStockCache() {
+      const branch = document.getElementById('admin-branch-select').value;
+      try {
+        const data = await apiCall("getLiveInventory", { branch }, null, "", true);
+        if (data.success) {
+          state.liveStockCache = {};
+          data.inventory.forEach(i => state.liveStockCache[i.item] = i.stock);
+          if (!document.getElementById('tab-kits').classList.contains('hidden')) validateKitForm();
+        }
+      } catch (e) {
+        console.warn("Live stock cache fetch failed: ", e.message);
+      }
     }
 
-    function renderRsInventory() {
-      const listDiv = document.getElementById('rs-inventory-list');
-      const searchTerm = document.getElementById('rs-inv-search').value.toLowerCase();
-      const catFilter = document.getElementById('rs-inv-category').value;
-      
-      listDiv.innerHTML = '';
+    function renderInventoryList(prefix, stateKey) {
+      const listDiv = document.getElementById(`${prefix}-inventory-list`);
+      const searchTerm = document.getElementById(`${prefix}-inv-search`).value.toLowerCase();
+      listDiv.textContent = '';
 
-      const filtered = state.inventory.filter(item => {
-        const matchesSearch = item.item.toLowerCase().includes(searchTerm);
-        const matchesCat = catFilter === "All" || item.category === catFilter;
-        return matchesSearch && matchesCat;
-      });
-
+      const filtered = state.inventory.filter(item => item.item.toLowerCase().includes(searchTerm));
       if (filtered.length === 0) {
         const empty = document.createElement('div');
         empty.style.cssText = "padding:15px; text-align:center; color:#666;";
@@ -614,6 +1193,85 @@
         const price = document.createElement('span');
         price.style.fontWeight = 'bold';
         price.style.color = '#007bff';
+        price.textContent = "+ SELECT";
+
+        div.appendChild(details);
+        div.appendChild(price);
+
+        div.addEventListener('click', () => {
+          if (!checkPendingWarning()) return;
+          state[stateKey] = item.item;
+          document.getElementById(`${prefix}-selected-item`).textContent = item.item;
+          if (prefix === 'dmg') validateDamagedForm();
+          if (prefix === 'adj') validateAdjustForm();
+          if (prefix === 'tr') validateTransferForm();
+        });
+        listDiv.appendChild(div);
+      });
+    }
+
+    // ==========================================
+    // RESTOCK TAB (Categories & Lines)
+    // ==========================================
+    function populateRsCategories() {
+      const catSelect = document.getElementById('rs-inv-category');
+      const currentVal = catSelect.value;
+      const cats = new Set(state.inventory.map(i => i.category).filter(Boolean));
+      catSelect.textContent = '';
+      
+      const allOpt = document.createElement('option');
+      allOpt.value = "All";
+      allOpt.textContent = "All Categories";
+      catSelect.appendChild(allOpt);
+
+      Array.from(cats).sort().forEach(cat => {
+        const opt = document.createElement('option');
+        opt.value = cat;
+        opt.textContent = cat;
+        catSelect.appendChild(opt);
+      });
+      if (cats.has(currentVal)) catSelect.value = currentVal;
+    }
+
+    function renderRsInventory() {
+      const listDiv = document.getElementById('rs-inventory-list');
+      const searchTerm = document.getElementById('rs-inv-search').value.toLowerCase();
+      const catFilter = document.getElementById('rs-inv-category').value;
+      
+      listDiv.textContent = '';
+
+      const filtered = state.inventory.filter(item => {
+        const matchesSearch = item.item.toLowerCase().includes(searchTerm);
+        const matchesCat = catFilter === "All" || item.category === catFilter;
+        return matchesSearch && matchesCat;
+      });
+
+      if (filtered.length === 0) {
+        const empty = document.createElement('div');
+        empty.style.cssText = "padding:15px; text-align:center; color:#666;";
+        empty.textContent = "No items found.";
+        listDiv.appendChild(empty);
+        return;
+      }
+
+      filtered.forEach(item => {
+        const div = document.createElement('div');
+        div.className = "inv-item";
+        
+        const details = document.createElement('div');
+        details.className = "inv-item-details";
+        const name = document.createElement('span');
+        name.className = "inv-item-name";
+        name.textContent = item.item;
+        const meta = document.createElement('span');
+        meta.className = "inv-item-meta";
+        meta.textContent = `${item.category}`;
+        details.appendChild(name);
+        details.appendChild(meta);
+
+        const price = document.createElement('span');
+        price.style.fontWeight = 'bold';
+        price.style.color = '#007bff';
         price.textContent = "+ ADD";
 
         div.appendChild(details);
@@ -624,12 +1282,8 @@
       });
     }
 
-    // ==========================================
-    // RESTOCK LINES MANAGEMENT
-    // ==========================================
     function handleAddRestockLine(itemObj) {
-      if (!checkPendingWarning(['ana_admin_pending_restock'])) return;
-      
+      if (!checkPendingWarning()) return;
       const existing = state.restockLines.find(r => r.item === itemObj.item);
       if (existing) {
         existing.qty += 1;
@@ -647,7 +1301,7 @@
     }
 
     function removeRestockLine(index) {
-      if (!checkPendingWarning(['ana_admin_pending_restock'])) return;
+      if (!checkPendingWarning()) return;
       state.restockLines.splice(index, 1);
       renderRestockLines();
     }
@@ -684,7 +1338,7 @@
 
     function renderRestockLines() {
       const container = document.getElementById('rs-lines-container');
-      container.innerHTML = '';
+      container.textContent = '';
       
       if (state.restockLines.length === 0) {
         const empty = document.createElement('div');
@@ -724,7 +1378,7 @@
         qtyInput.min = "1";
         qtyInput.value = line._qtyInvalid ? "" : line.qty;
         qtyInput.className = "rs-input";
-        qtyInput.addEventListener('focus', (e) => handleInputFocus(e, ['ana_admin_pending_restock']));
+        qtyInput.addEventListener('focus', handleInputFocus);
         qtyInput.addEventListener('input', (e) => updateRestockLineQty(index, e.target.value));
         
         const costLabel = document.createElement('span');
@@ -736,7 +1390,7 @@
         costInput.min = "0.01";
         costInput.value = line._costInvalid ? "" : line.unitCost.toFixed(2);
         costInput.className = "rs-input";
-        costInput.addEventListener('focus', (e) => handleInputFocus(e, ['ana_admin_pending_restock']));
+        costInput.addEventListener('focus', handleInputFocus);
         costInput.addEventListener('input', (e) => updateRestockLineCost(index, e.target.value));
         
         controlsDiv.appendChild(qtyLabel);
@@ -749,11 +1403,6 @@
         container.appendChild(itemDiv);
       });
       updateRestockTotals();
-    }
-
-    function getVal(id) {
-      const val = parseFloat(document.getElementById(id).value);
-      return isNaN(val) ? 0 : val;
     }
 
     function updateRestockTotals() {
@@ -806,53 +1455,72 @@
         reasonEl.textContent = reason;
       } else {
         btn.disabled = state.isSubmittingRestock;
-        reasonEl.textContent = "";
+        if (reasonEl.textContent !== "NOT CONFIRMED, TAP TO RETRY") reasonEl.textContent = "";
       }
     }
 
     async function handleRestockSubmit() {
-      if (state.restockLines.length === 0) return;
       if (state.isSubmittingRestock) return;
-      if (state.restockLines.some(r => r._qtyInvalid || r._costInvalid)) return;
-
-      const btn = document.getElementById('btn-submit-restock');
-      const err = document.getElementById('rs-error');
-      err.style.display = 'none';
+      if (state.restockLines.length === 0 || state.restockLines.some(r => r._qtyInvalid || r._costInvalid)) return;
 
       state.isSubmittingRestock = true;
+      const btn = document.getElementById('btn-submit-restock');
+      btn.disabled = true;
+      
+      const err = document.getElementById('rs-error');
+      err.style.display = 'none';
+      const reasonEl = document.getElementById('rs-submit-reason');
+
+      const cash = round2(getVal('rs-cash'));
+      const momo = round2(getVal('rs-momo'));
+      const bank = round2(getVal('rs-bank'));
+
+      const warnOk = await runSoftWalletWarning({ Cash: cash, MoMo: momo, Bank: bank });
+      if (!warnOk) {
+         state.isSubmittingRestock = false; updateRestockTotals(); return;
+      }
+
+      // Re-read and re-validate inputs explicitly
+      const cCash = round2(getVal('rs-cash'));
+      const cMomo = round2(getVal('rs-momo'));
+      const cBank = round2(getVal('rs-bank'));
+      const cSupplier = document.getElementById('rs-supplier').value.trim();
+      const cCharge = round2(getVal('rs-supplier-charge'));
+      let cGoodsTotal = 0;
+      let hasLineError = false;
+      state.restockLines.forEach(r => {
+        if (r._qtyInvalid || r._costInvalid) hasLineError = true;
+        else cGoodsTotal = round2(cGoodsTotal + round2(r.qty * r.unitCost));
+      });
+      const cTotalToPay = round2(cGoodsTotal + cCharge);
+      const cTotalPaid = round2(cCash + cMomo + cBank);
+
+      if (state.restockLines.length === 0 || hasLineError || !cSupplier || cCharge < 0 || cCash < 0 || cMomo < 0 || cBank < 0 || round2(cTotalPaid - cTotalToPay) !== 0) {
+         reasonEl.textContent = "Form invalid"; state.isSubmittingRestock = false; updateRestockTotals(); return;
+      }
+
       lockPage();
-      updateRestockTotals();
+      btn.textContent = "PROCESSING...";
 
       try {
         const payments = [];
-        const cash = round2(getVal('rs-cash'));
-        const momo = round2(getVal('rs-momo'));
-        const bank = round2(getVal('rs-bank'));
-        
-        if (cash > 0) payments.push({ wallet: "Cash", amount: cash });
-        if (momo > 0) payments.push({ wallet: "MoMo", amount: momo });
-        if (bank > 0) payments.push({ wallet: "Bank", amount: bank });
+        if (cCash > 0) payments.push({ wallet: "Cash", amount: cCash });
+        if (cMomo > 0) payments.push({ wallet: "MoMo", amount: cMomo });
+        if (cBank > 0) payments.push({ wallet: "Bank", amount: cBank });
 
         const payload = {
           branch: document.getElementById('admin-branch-select').value,
-          supplier: document.getElementById('rs-supplier').value.trim(),
-          supplierCharge: round2(getVal('rs-supplier-charge')),
+          supplier: cSupplier,
+          supplierCharge: cCharge,
           notes: document.getElementById('rs-notes').value.trim(),
           items: state.restockLines.map(r => {
-             const q = r.qty;
-             const c = r.unitCost;
-             if (!Number.isInteger(q) || q < 1 || c <= 0) throw new Error("Payload rebuild failed due to invalid internal state.");
-             return { item: r.item, qty: q, unitCost: c };
+             if (!Number.isInteger(r.qty) || r.qty < 1 || r.unitCost <= 0) throw new Error("Payload rebuild failed due to invalid internal state.");
+             return { item: r.item, qty: r.qty, unitCost: r.unitCost };
           }),
           payments: payments
         };
 
-        const goodsTotal = payload.items.reduce((sum, r) => round2(sum + round2(r.qty * r.unitCost)), 0);
-        const totalToPay = round2(goodsTotal + payload.supplierCharge);
-
-        btn.textContent = "PROCESSING...";
-
-        const summaryStr = `Supplier: ${payload.supplier}, Total: ${totalToPay}`;
+        const summaryStr = `Supplier: ${payload.supplier}, Total: ${cTotalToPay}`;
         const data = await apiCall("submitRestockBatch", payload, 'ana_admin_pending_restock', summaryStr);
         
         if (!data.success) {
@@ -865,20 +1533,20 @@
         localStorage.removeItem('ana_admin_pending_restock');
         showSuccess(data, 'restock');
         resetRestockForm();
+        fetchTreasury(true);
 
       } catch (e) {
+        err.style.display = 'block';
         if (e.message.includes("Session expired")) {
-           btn.textContent = "SUBMIT RESTOCK";
-           return;
+           err.textContent = "Session expired. Log in and tap retry";
+           btn.textContent = "NOT CONFIRMED, TAP TO RETRY";
         } else if (e.message.includes("Payload rebuild")) {
            err.textContent = e.message;
-           err.style.display = 'block';
            btn.textContent = "SUBMIT RESTOCK";
-           return;
+        } else {
+           err.textContent = "Network Error: " + e.message;
+           btn.textContent = "NOT CONFIRMED, TAP TO RETRY";
         }
-        err.textContent = "Network Error: " + e.message;
-        err.style.display = 'block';
-        btn.textContent = "NOT CONFIRMED, TAP TO RETRY";
       } finally {
         state.isSubmittingRestock = false;
         unlockPage();
@@ -901,61 +1569,154 @@
     }
 
     // ==========================================
-    // EXPENSE MANAGEMENT
+    // EXPENSE MANAGEMENT (SPLIT OVER WALLETS)
     // ==========================================
+    function lockExpenseForm(isLocked) {
+      document.getElementById('ex-category').disabled = isLocked;
+      document.getElementById('ex-notes').disabled = isLocked;
+      document.getElementById('ex-cash').disabled = isLocked;
+      document.getElementById('ex-momo').disabled = isLocked;
+      document.getElementById('ex-bank').disabled = isLocked;
+    }
+
     function validateExpenseForm() {
+      const cash = round2(getVal('ex-cash'));
+      const momo = round2(getVal('ex-momo'));
+      const bank = round2(getVal('ex-bank'));
+      const total = round2(cash + momo + bank);
+      
       const btn = document.getElementById('btn-submit-expense');
-      const amt = round2(getVal('ex-amount'));
-      btn.disabled = (state.isSubmittingExpense || amt <= 0);
+      btn.disabled = (state.isSubmittingExpense || total <= 0);
     }
 
     async function handleExpenseSubmit() {
       if (state.isSubmittingExpense) return;
-
+      state.isSubmittingExpense = true;
+      
       const btn = document.getElementById('btn-submit-expense');
+      btn.disabled = true;
+      
       const err = document.getElementById('ex-error');
       err.style.display = 'none';
 
-      const amount = round2(getVal('ex-amount'));
-      if (amount <= 0) return;
+      let cash = round2(getVal('ex-cash'));
+      let momo = round2(getVal('ex-momo'));
+      let bank = round2(getVal('ex-bank'));
+      if (cash + momo + bank <= 0) {
+        state.isSubmittingExpense = false; validateExpenseForm(); return;
+      }
 
-      state.isSubmittingExpense = true;
+      const warnOk = await runSoftWalletWarning({ Cash: cash, MoMo: momo, Bank: bank });
+      if (!warnOk) { 
+        state.isSubmittingExpense = false; validateExpenseForm(); return; 
+      }
+
+      cash = round2(getVal('ex-cash'));
+      momo = round2(getVal('ex-momo'));
+      bank = round2(getVal('ex-bank'));
+      if (cash + momo + bank <= 0) { 
+        err.textContent = "Amount must be above 0"; 
+        err.style.display = 'block'; 
+        state.isSubmittingExpense = false; 
+        validateExpenseForm(); 
+        return; 
+      }
+
+      state.expenseStopRequested = false;
       lockPage();
-      validateExpenseForm();
+
+      let jobs = [];
+      const category = document.getElementById('ex-category').value;
+      const notes = document.getElementById('ex-notes').value.trim();
+      const branch = document.getElementById('admin-branch-select').value;
+      
+      if (cash > 0) jobs.push({ wallet: 'Cash', amount: cash });
+      if (momo > 0) jobs.push({ wallet: 'MoMo', amount: momo });
+      if (bank > 0) jobs.push({ wallet: 'Bank', amount: bank });
+
+      const progressContainer = document.getElementById('ex-progress-container');
+      const progressText = document.getElementById('ex-progress-text');
+      const stopBtn = document.getElementById('btn-stop-expense');
+      
+      progressContainer.classList.remove('hidden');
+      stopBtn.classList.add('hidden');
+      btn.classList.add('hidden');
+      
+      let allSuccess = true;
+      let isNetworkErr = false;
+      let lastErr = "";
+      let transIds = [];
+      
+      state.splitStatus = { recorded: [], unconfirmed: jobs.map(j => j.wallet) };
 
       try {
-        const payload = {
-          amount: amount,
-          wallet: document.getElementById('ex-wallet').value,
-          category: document.getElementById('ex-category').value,
-          notes: document.getElementById('ex-notes').value.trim(),
-          branch: document.getElementById('admin-branch-select').value
-        };
-
-        btn.textContent = "PROCESSING...";
-
-        const summaryStr = `Amount: ${payload.amount}, Category: ${payload.category}`;
-        const data = await apiCall("submitExpense", payload, 'ana_admin_pending_expense', summaryStr);
-        
-        if (!data.success) {
-          err.textContent = data.error || "Transaction failed at server.";
-          err.style.display = 'block';
-          btn.textContent = "SUBMIT EXPENSE";
-          return;
+        for (let i = 0; i < jobs.length; i++) {
+          if (state.expenseStopRequested) break;
+          
+          const j = jobs[i];
+          const pKey = `ana_admin_pending_expense_${j.wallet}`;
+          progressText.textContent = `Processing ${j.wallet} (${i + 1}/${jobs.length})...`;
+          
+          try {
+            const payload = { amount: j.amount, wallet: j.wallet, category, notes, branch };
+            const data = await apiCall("submitExpense", payload, pKey, `Expense ${j.wallet}: ${j.amount}`);
+            
+            if (!data.success) {
+              allSuccess = false;
+              isNetworkErr = false;
+              lastErr = data.error || "Transaction failed at server.";
+              break; 
+            }
+            
+            localStorage.removeItem(pKey);
+            document.getElementById(`ex-${j.wallet.toLowerCase()}`).value = ""; 
+            
+            state.splitStatus.recorded.push(j.wallet);
+            state.splitStatus.unconfirmed = state.splitStatus.unconfirmed.filter(w => w !== j.wallet);
+            transIds.push({ id: data.transId, duplicateBlocked: data.duplicateBlocked });
+            
+          } catch(e) {
+            allSuccess = false;
+            isNetworkErr = true;
+            if (e.message.includes("Session expired")) {
+              lastErr = "Session expired. Log in and tap retry";
+            } else {
+              lastErr = "Network Error: " + e.message;
+            }
+            break; 
+          }
         }
 
-        localStorage.removeItem('ana_admin_pending_expense');
-        showSuccess(data, 'expense');
-        resetExpenseForm();
+        fetchTreasury(true); 
 
-      } catch (e) {
-        if (e.message.includes("Session expired")) {
-           btn.textContent = "SUBMIT EXPENSE";
-           return;
+        if (state.expenseStopRequested || allSuccess) {
+          progressContainer.classList.add('hidden');
+          btn.classList.remove('hidden');
+          lockExpenseForm(false);
+          
+          if (allSuccess) {
+            showSuccess({ transIds: transIds }, 'expense');
+            resetExpenseForm();
+          } else {
+            btn.textContent = "SUBMIT EXPENSE";
+          }
+        } else {
+          if (isNetworkErr) {
+            progressText.textContent = "Paused. " + lastErr;
+            stopBtn.classList.remove('hidden');
+            btn.classList.remove('hidden');
+            btn.textContent = "NOT CONFIRMED, TAP TO RETRY";
+            lockExpenseForm(state.splitStatus.recorded.length > 0);
+          } else {
+            progressContainer.classList.add('hidden');
+            btn.classList.remove('hidden');
+            btn.textContent = "SUBMIT EXPENSE";
+            lockExpenseForm(false);
+            let recNote = state.splitStatus.recorded.length > 0 ? ` (Already recorded: ${state.splitStatus.recorded.join(", ")})` : "";
+            err.textContent = lastErr + recNote;
+            err.style.display = 'block';
+          }
         }
-        err.textContent = "Network Error: " + e.message;
-        err.style.display = 'block';
-        btn.textContent = "NOT CONFIRMED, TAP TO RETRY";
       } finally {
         state.isSubmittingExpense = false;
         unlockPage();
@@ -964,24 +1725,1536 @@
     }
 
     function resetExpenseForm() {
-      document.getElementById('ex-amount').value = "";
-      document.getElementById('ex-wallet').value = "Cash";
+      document.getElementById('ex-cash').value = "";
+      document.getElementById('ex-momo').value = "";
+      document.getElementById('ex-bank').value = "";
       document.getElementById('ex-category').value = "Transport";
       document.getElementById('ex-notes').value = "";
       document.getElementById('ex-error').style.display = 'none';
-      document.getElementById('btn-submit-expense').textContent = "SUBMIT EXPENSE";
+      
+      lockExpenseForm(false);
+      document.getElementById('ex-progress-container').classList.add('hidden');
+      const btn = document.getElementById('btn-submit-expense');
+      btn.classList.remove('hidden');
+      btn.textContent = "SUBMIT EXPENSE";
+      
       validateExpenseForm();
     }
 
     // ==========================================
-    // SUCCESS UI
+    // MONEY MANAGEMENT
     // ==========================================
-    function showSuccess(data, tab) {
+    function validateMoneyForm() {
+      const amt = round2(getVal('mon-amount'));
+      const from = document.getElementById('mon-from').value;
+      const to = document.getElementById('mon-to').value;
+      
+      const btnDep = document.getElementById('btn-mon-deposit');
+      const btnWd = document.getElementById('btn-mon-withdraw');
+      const btnMove = document.getElementById('btn-mon-move');
+      const reason = document.getElementById('mon-reason');
+
+      btnDep.disabled = true; 
+      btnWd.disabled = true; 
+      btnMove.disabled = true;
+
+      if (amt <= 0) {
+        if (reason.textContent !== "NOT CONFIRMED, TAP TO RETRY") reason.textContent = "Amount must be above 0";
+        return;
+      }
+      if (state.isSubmittingMoney) {
+        if (reason.textContent !== "NOT CONFIRMED, TAP TO RETRY") reason.textContent = "Processing...";
+        return;
+      }
+
+      if (reason.textContent !== "NOT CONFIRMED, TAP TO RETRY") reason.textContent = "";
+      btnDep.disabled = false;
+      btnWd.disabled = false;
+      
+      if (from === to) {
+        btnMove.disabled = true;
+        if (reason.textContent !== "NOT CONFIRMED, TAP TO RETRY") reason.textContent = "Select different wallets to move";
+      } else {
+        btnMove.disabled = false;
+      }
+    }
+
+    async function handleMoneySubmit(mode) {
+      if (state.isSubmittingMoney) return;
+      state.isSubmittingMoney = true;
+      document.getElementById('btn-mon-deposit').disabled = true;
+      document.getElementById('btn-mon-withdraw').disabled = true;
+      document.getElementById('btn-mon-move').disabled = true;
+
+      let amt = round2(getVal('mon-amount'));
+      let fromVal = document.getElementById('mon-from').value;
+      let toVal = document.getElementById('mon-to').value;
+      
+      let from, to;
+      let deductions = {};
+      if (mode === 'deposit') { from = "Owner Injection"; to = toVal; }
+      else if (mode === 'withdraw') { from = fromVal; to = "Owner Withdrawal"; deductions[fromVal] = amt; }
+      else if (mode === 'move') { from = fromVal; to = toVal; deductions[fromVal] = amt; }
+
+      if (amt <= 0 || (mode === 'move' && from === to)) {
+        state.isSubmittingMoney = false; validateMoneyForm(); return;
+      }
+
+      const warnOk = await runSoftWalletWarning(deductions);
+      if (!warnOk) { 
+        state.isSubmittingMoney = false; validateMoneyForm(); return; 
+      }
+
+      amt = round2(getVal('mon-amount'));
+      fromVal = document.getElementById('mon-from').value;
+      toVal = document.getElementById('mon-to').value;
+      
+      if (mode === 'deposit') { from = "Owner Injection"; to = toVal; }
+      else if (mode === 'withdraw') { from = fromVal; to = "Owner Withdrawal"; }
+      else if (mode === 'move') { from = fromVal; to = toVal; }
+
+      const reasonEl = document.getElementById('mon-reason');
+      if (amt <= 0 || (mode === 'move' && from === to)) { 
+        reasonEl.textContent = "Amount must be above 0 / Valid wallets required"; 
+        state.isSubmittingMoney = false; validateMoneyForm(); return; 
+      }
+
+      let confirmMsg = "";
+      if (mode === 'deposit') confirmMsg = `Deposit ${amt.toFixed(2)} into ${to}?`;
+      else if (mode === 'withdraw') confirmMsg = `Withdraw ${amt.toFixed(2)} from ${from} as owner pay?`;
+      else confirmMsg = `Move ${amt.toFixed(2)} from ${from} to ${to}?`;
+      
+      if (!confirm(confirmMsg)) {
+        state.isSubmittingMoney = false; validateMoneyForm(); return;
+      }
+
+      lockPage();
+      const err = document.getElementById('mon-error');
+      err.style.display = 'none';
+      reasonEl.textContent = "PROCESSING...";
+
+      try {
+        const payload = { from: from, to: to, amount: amt, notes: document.getElementById('mon-notes').value.trim() };
+        let actionDesc = "";
+        if (mode === 'deposit') actionDesc = `DEPOSIT ${amt} into ${to}`;
+        else if (mode === 'withdraw') actionDesc = `WITHDRAW ${amt} from ${from}`;
+        else actionDesc = `MOVE ${amt} from ${from} to ${to}`;
+
+        const data = await apiCall("submitCapitalTransfer", payload, 'ana_admin_pending_money', actionDesc);
+        
+        if (!data.success) {
+          err.textContent = data.error;
+          err.style.display = 'block';
+          reasonEl.textContent = "";
+          return;
+        }
+
+        localStorage.removeItem('ana_admin_pending_money');
+        showSuccess(data, 'money');
+        document.getElementById('mon-amount').value = "";
+        document.getElementById('mon-notes').value = "";
+        fetchTreasury(true);
+
+      } catch(e) {
+        err.style.display = 'block';
+        if (e.message.includes("Session expired")) {
+          err.textContent = "Session expired. Log in and tap retry";
+          reasonEl.textContent = "NOT CONFIRMED, TAP TO RETRY";
+          return;
+        }
+        err.textContent = "Network Error: " + e.message;
+        reasonEl.textContent = "NOT CONFIRMED, TAP TO RETRY";
+      } finally {
+        state.isSubmittingMoney = false;
+        unlockPage();
+        validateMoneyForm();
+      }
+    }
+
+    // ==========================================
+    // DEBTORS MANAGEMENT
+    // ==========================================
+    async function fetchDebtors(isSilent = false) {
+      const container = document.getElementById('debtor-list');
+      container.textContent = '';
+      const loadMsg = document.createElement('div');
+      loadMsg.style.cssText = "padding:15px; text-align:center; color:#666;";
+      loadMsg.textContent = "Loading debtors...";
+      container.appendChild(loadMsg);
+
+      try {
+        const data = await apiCall("getDebtors", {}, null, "", isSilent);
+        container.textContent = '';
+        if (data.success) {
+          state.debtors = data.debtors || [];
+          renderDebtors();
+        } else {
+          const err = document.createElement('span');
+          err.style.color = "#dc3545";
+          err.textContent = data.error || "Failed to load debtors.";
+          container.appendChild(err);
+        }
+      } catch(e) {
+        if (e.message.includes("Session expired")) return; 
+        container.textContent = '';
+        const err = document.createElement('span');
+        err.style.color = "#dc3545";
+        err.textContent = "Error: " + e.message;
+        container.appendChild(err);
+      }
+    }
+
+    function renderDebtors() {
+      const container = document.getElementById('debtor-list');
+      const term = document.getElementById('debtor-search').value.toLowerCase();
+      container.textContent = '';
+      
+      const filtered = state.debtors.filter(d => d.customerName.toLowerCase().includes(term));
+      if (filtered.length === 0) { 
+        const empty = document.createElement('div');
+        empty.style.cssText = "padding:15px; text-align:center; color:#666;";
+        empty.textContent = "No debtors found.";
+        container.appendChild(empty);
+        return; 
+      }
+      
+      filtered.forEach(d => {
+        const div = document.createElement('div');
+        div.className = "inv-item";
+        
+        const nameDiv = document.createElement('div');
+        nameDiv.className = "inv-item-details";
+        const nameSpan = document.createElement('span');
+        nameSpan.className = "inv-item-name";
+        nameSpan.textContent = d.customerName;
+        nameDiv.appendChild(nameSpan);
+        
+        const balSpan = document.createElement('span');
+        balSpan.className = "inv-item-price";
+        balSpan.style.color = "#dc3545";
+        balSpan.textContent = d.balance.toFixed(2);
+        
+        div.appendChild(nameDiv);
+        div.appendChild(balSpan);
+
+        div.addEventListener('click', () => {
+          if (state.isSubmittingRepay) return;
+          loadDebtorHistory(d.customerName, d.balance);
+        });
+        container.appendChild(div);
+      });
+    }
+
+    async function loadDebtorHistory(name, balance) {
+      state.currentDebtor = name;
+      state.currentDebtorBalance = balance;
+      
+      document.getElementById('dh-pay-amount').value = "";
+      document.getElementById('dh-pay-notes').value = "";
+      document.getElementById('dh-error').style.display = 'none';
+      document.getElementById('btn-submit-repay').disabled = true;
+
+      document.getElementById('debtor-history-card').classList.remove('hidden');
+      document.getElementById('dh-name').textContent = name;
+      document.getElementById('dh-balance').textContent = balance.toFixed(2);
+      
+      const rowsContainer = document.getElementById('dh-rows');
+      rowsContainer.textContent = '';
+      const loadMsg = document.createElement('div');
+      loadMsg.textContent = "Loading history...";
+      rowsContainer.appendChild(loadMsg);
+      
+      document.getElementById('debtor-history-card').scrollIntoView({behavior: "smooth"});
+      
+      try {
+        const data = await apiCall("getDebtorHistory", {customerName: name}, null, "", false); 
+        if (state.currentDebtor !== name) return;
+        
+        rowsContainer.textContent = '';
+        
+        if (data.success) {
+          state.currentDebtor = data.customerName;
+          state.currentDebtorBalance = data.balance;
+          document.getElementById('dh-name').textContent = data.customerName;
+          document.getElementById('dh-balance').textContent = data.balance.toFixed(2);
+          
+          let lastCreditText = "No credit found";
+          let maxTime = 0;
+          data.rows.forEach(r => {
+            if (r.type === "Credit Given") {
+              const t = new Date(r.time).getTime();
+              if (t > maxTime) maxTime = t;
+            }
+          });
+          if (maxTime > 0) {
+            const days = Math.floor((Date.now() - maxTime) / 86400000);
+            lastCreditText = `Last credit ${days} days ago`;
+          }
+          document.getElementById('dh-last-credit').textContent = lastCreditText;
+          
+          data.rows.forEach(r => {
+            const dObj = new Date(r.time);
+            const dStr = `${dObj.getMonth()+1}/${dObj.getDate()} ${dObj.getHours()}:${String(dObj.getMinutes()).padStart(2,'0')}`;
+            const rDiv = document.createElement('div');
+            rDiv.style.cssText = "display:flex; justify-content:space-between; border-bottom:1px solid #eee; padding:5px 0;";
+            
+            const leftDiv = document.createElement('div');
+            const timeStr = document.createElement('strong');
+            timeStr.textContent = dStr;
+            const br1 = document.createElement('br');
+            const typeSpan = document.createElement('span');
+            typeSpan.style.color = "#666";
+            typeSpan.textContent = r.type;
+            const br2 = document.createElement('br');
+            const itemSpan = document.createElement('span');
+            itemSpan.style.cssText = "color:#888; font-size:0.8rem;";
+            itemSpan.textContent = r.item;
+            
+            leftDiv.appendChild(timeStr); leftDiv.appendChild(br1);
+            leftDiv.appendChild(typeSpan); leftDiv.appendChild(br2);
+            leftDiv.appendChild(itemSpan);
+            
+            const rightDiv = document.createElement('div');
+            rightDiv.style.fontWeight = "bold";
+            rightDiv.textContent = (r.impact > 0 ? "+" : "") + r.impact.toFixed(2);
+            
+            rDiv.appendChild(leftDiv);
+            rDiv.appendChild(rightDiv);
+            rowsContainer.appendChild(rDiv);
+          });
+          validateDebtorForm();
+        } else {
+          const err = document.createElement('span');
+          err.style.color = "#dc3545";
+          err.textContent = data.error;
+          rowsContainer.appendChild(err);
+        }
+      } catch(e) {
+        if (e.message.includes("Session expired")) return;
+        if (state.currentDebtor !== name) return;
+        rowsContainer.textContent = '';
+        const err = document.createElement('span');
+        err.style.color = "#dc3545";
+        err.textContent = e.message;
+        rowsContainer.appendChild(err);
+      }
+    }
+
+    function validateDebtorForm() {
+      const amt = round2(getVal('dh-pay-amount'));
+      const btn = document.getElementById('btn-submit-repay');
+      const reason = document.getElementById('dh-pay-reason');
+      
+      if (amt <= 0) {
+        btn.disabled = true;
+        reason.textContent = "Enter amount";
+      } else if (amt > state.currentDebtorBalance) {
+        btn.disabled = true;
+        reason.textContent = "Exceeds balance";
+      } else {
+        btn.disabled = state.isSubmittingRepay;
+        reason.textContent = "";
+      }
+    }
+
+    async function handleRepaySubmit() {
+      if (state.isSubmittingRepay) return;
+      state.isSubmittingRepay = true;
+      const btn = document.getElementById('btn-submit-repay');
+      btn.disabled = true;
+      const err = document.getElementById('dh-error');
+      err.style.display = 'none';
+
+      let amt = round2(getVal('dh-pay-amount'));
+      if (amt <= 0 || amt > state.currentDebtorBalance) {
+        state.isSubmittingRepay = false; validateDebtorForm(); return;
+      }
+
+      lockPage();
+      btn.textContent = "PROCESSING...";
+      
+      try {
+        const payload = {
+          customerName: state.currentDebtor,
+          amount: amt,
+          wallet: document.getElementById('dh-pay-wallet').value,
+          notes: document.getElementById('dh-pay-notes').value.trim()
+        };
+        const data = await apiCall("recordDebtRepayment", payload, 'ana_admin_pending_repay', `Repay: ${amt}`);
+        if (!data.success) {
+          err.textContent = data.error;
+          err.style.display = 'block';
+          btn.textContent = "SUBMIT REPAYMENT";
+          return;
+        }
+        
+        localStorage.removeItem('ana_admin_pending_repay');
+        showSuccess(data, 'repay');
+        document.getElementById('dh-pay-amount').value = "";
+        document.getElementById('dh-pay-notes').value = "";
+        btn.textContent = "SUBMIT REPAYMENT";
+        
+        fetchTreasury(true);
+        fetchDebtors(true);
+        loadDebtorHistory(state.currentDebtor, round2(state.currentDebtorBalance - amt));
+        
+      } catch(e) {
+        err.style.display = 'block';
+        if (e.message.includes("Session expired")) {
+          err.textContent = "Session expired. Log in and tap retry";
+          btn.textContent = "NOT CONFIRMED, TAP TO RETRY";
+          return;
+        }
+        err.textContent = "Network Error: " + e.message;
+        btn.textContent = "NOT CONFIRMED, TAP TO RETRY";
+      } finally {
+        state.isSubmittingRepay = false;
+        unlockPage();
+        validateDebtorForm();
+      }
+    }
+
+    // ==========================================
+    // DAMAGED TAB
+    // ==========================================
+    function validateDamagedForm() {
+      const qtyVal = document.getElementById('dmg-qty').value.trim();
+      const qty = Number(qtyVal);
+      const btn = document.getElementById('btn-submit-damaged');
+      const reason = document.getElementById('dmg-reason-text');
+      
+      if (!state.dmgItem) {
+        btn.disabled = true;
+        reason.textContent = "Select an item";
+        return;
+      }
+      if (qtyVal === "" || !Number.isFinite(qty) || !Number.isInteger(qty) || qty <= 0) {
+        btn.disabled = true;
+        reason.textContent = "Whole numbers only";
+        return;
+      }
+
+      btn.disabled = state.isSubmittingDamaged;
+      reason.textContent = "";
+    }
+
+    async function handleDamagedSubmit() {
+      if (state.isSubmittingDamaged || !state.dmgItem) return;
+      state.isSubmittingDamaged = true;
+      const btn = document.getElementById('btn-submit-damaged');
+      btn.disabled = true;
+      const err = document.getElementById('dmg-error');
+      err.style.display = 'none';
+
+      const qtyVal = document.getElementById('dmg-qty').value.trim();
+      const qty = Number(qtyVal);
+      if (qtyVal === "" || !Number.isFinite(qty) || !Number.isInteger(qty) || qty <= 0) {
+        state.isSubmittingDamaged = false;
+        validateDamagedForm();
+        return;
+      }
+
+      const branch = document.getElementById('admin-branch-select').value;
+      const reasonVal = document.getElementById('dmg-reason').value;
+
+      lockPage();
+      btn.textContent = "CHECKING STOCK...";
+      let liveStock = 0;
+      let foundInLive = false;
+      try {
+        const stockData = await apiCall("getLiveInventory", { branch }, null, "", false);
+        if (stockData.success) {
+           const it = stockData.inventory.find(i => i.item === state.dmgItem);
+           if (it) {
+             liveStock = it.stock;
+             foundInLive = true;
+           }
+        }
+      } catch(e) {
+         err.textContent = "Failed to read stock: " + e.message;
+         err.style.display = 'block';
+         state.isSubmittingDamaged = false;
+         btn.textContent = "SUBMIT DAMAGED/LOST";
+         unlockPage();
+         validateDamagedForm();
+         return;
+      }
+
+      if (!foundInLive) {
+         err.textContent = "Item not found in live stock (it may be missing a price or cost in Inventory Master).";
+         err.style.display = 'block';
+         state.isSubmittingDamaged = false;
+         btn.textContent = "SUBMIT DAMAGED/LOST";
+         unlockPage();
+         validateDamagedForm();
+         return;
+      }
+
+      if (qty > liveStock) {
+         err.textContent = `Only ${liveStock} in stock at ${branch}.`;
+         err.style.display = 'block';
+         state.isSubmittingDamaged = false;
+         btn.textContent = "SUBMIT DAMAGED/LOST";
+         unlockPage();
+         validateDamagedForm();
+         return;
+      }
+
+      if (!confirm(`Record ${qty} x ${state.dmgItem} as ${reasonVal}?`)) {
+         state.isSubmittingDamaged = false;
+         btn.textContent = "SUBMIT DAMAGED/LOST";
+         unlockPage();
+         validateDamagedForm();
+         return;
+      }
+
+      btn.textContent = "PROCESSING...";
+      try {
+         const payload = { item: state.dmgItem, branch, qty, reason: reasonVal, notes: document.getElementById('dmg-notes').value.trim() };
+         const res = await apiCall("submitDamagedLost", payload, 'ana_admin_pending_damaged', `Damaged: ${qty}x ${state.dmgItem}`);
+         if (!res.success) {
+           err.textContent = res.error;
+           err.style.display = 'block';
+           btn.textContent = "SUBMIT DAMAGED/LOST";
+           return;
+         }
+         localStorage.removeItem('ana_admin_pending_damaged');
+         
+         let lines = [];
+         if (res.damageValue !== undefined) {
+            lines.push(`Loss recorded: ${res.damageValue}`);
+         }
+         showSuccess(res, 'damaged', lines);
+         document.getElementById('dmg-qty').value = "";
+         document.getElementById('dmg-notes').value = "";
+         fetchLiveStockCache();
+      } catch(e) {
+         err.style.display = 'block';
+         if (e.message.includes("Session expired")) {
+           err.textContent = "Session expired. Log in and tap retry";
+           btn.textContent = "NOT CONFIRMED, TAP TO RETRY";
+           return;
+         }
+         err.textContent = "Network Error: " + e.message;
+         btn.textContent = "NOT CONFIRMED, TAP TO RETRY";
+      } finally {
+         state.isSubmittingDamaged = false;
+         unlockPage();
+         validateDamagedForm();
+      }
+    }
+
+    // ==========================================
+    // ADJUST TAB
+    // ==========================================
+    function validateAdjustForm() {
+      const mode = document.getElementById('adj-mode').value;
+      const btn = document.getElementById('btn-submit-adjust');
+      const reason = document.getElementById('adj-reason-text');
+      
+      if (!state.adjItem) {
+        btn.disabled = true;
+        reason.textContent = "Select an item";
+        return;
+      }
+      
+      if (mode === 'counted') {
+        const cVal = document.getElementById('adj-counted').value.trim();
+        const c = Number(cVal);
+        if (cVal === "" || !Number.isFinite(c) || !Number.isInteger(c) || c < 0) {
+          btn.disabled = true;
+          reason.textContent = "Whole numbers only";
+          return;
+        }
+      } else {
+        const qVal = document.getElementById('adj-qty').value.trim();
+        const q = Number(qVal);
+        if (qVal === "" || !Number.isFinite(q) || !Number.isInteger(q) || q <= 0) {
+          btn.disabled = true;
+          reason.textContent = "Whole numbers only";
+          return;
+        }
+      }
+
+      btn.disabled = state.isSubmittingAdjust;
+      reason.textContent = "";
+    }
+
+    async function handleAdjustSubmit() {
+      if (state.isSubmittingAdjust || !state.adjItem) return;
+      state.isSubmittingAdjust = true;
+      const btn = document.getElementById('btn-submit-adjust');
+      btn.disabled = true;
+      const err = document.getElementById('adj-error');
+      err.style.display = 'none';
+
+      const mode = document.getElementById('adj-mode').value;
+      const countedVal = document.getElementById('adj-counted').value.trim();
+      const counted = Number(countedVal);
+      const dir = document.getElementById('adj-dir').value;
+      const qtyVal = document.getElementById('adj-qty').value.trim();
+      const qty = Number(qtyVal);
+
+      if (mode === 'counted' && (countedVal === "" || !Number.isFinite(counted) || !Number.isInteger(counted) || counted < 0)) {
+        state.isSubmittingAdjust = false; validateAdjustForm(); return;
+      }
+      if (mode === 'manual' && (qtyVal === "" || !Number.isFinite(qty) || !Number.isInteger(qty) || qty <= 0)) {
+        state.isSubmittingAdjust = false; validateAdjustForm(); return;
+      }
+
+      const branch = document.getElementById('admin-branch-select').value;
+      const reasonVal = document.getElementById('adj-reason').value;
+
+      lockPage();
+      btn.textContent = "CHECKING STOCK...";
+      let liveStock = 0;
+      let foundInLive = false;
+      try {
+        const stockData = await apiCall("getLiveInventory", { branch }, null, "", false);
+        if (stockData.success) {
+           const it = stockData.inventory.find(i => i.item === state.adjItem);
+           if (it) {
+             liveStock = it.stock;
+             foundInLive = true;
+           }
+        }
+      } catch(e) {
+         err.textContent = "Failed to read stock: " + e.message;
+         err.style.display = 'block';
+         state.isSubmittingAdjust = false;
+         btn.textContent = "SUBMIT ADJUSTMENT";
+         unlockPage();
+         validateAdjustForm();
+         return;
+      }
+
+      if (!foundInLive) {
+         err.textContent = "Item not found in live stock (it may be missing a price or cost in Inventory Master).";
+         err.style.display = 'block';
+         state.isSubmittingAdjust = false;
+         btn.textContent = "SUBMIT ADJUSTMENT";
+         unlockPage();
+         validateAdjustForm();
+         return;
+      }
+
+      let finalDir = dir;
+      let finalQty = qty;
+
+      if (mode === 'counted') {
+         let diff = counted - liveStock;
+         if (diff === 0) {
+            err.textContent = `System says ${liveStock}, you counted ${counted}. Nothing to adjust.`;
+            err.style.display = 'block';
+            state.isSubmittingAdjust = false;
+            btn.textContent = "SUBMIT ADJUSTMENT";
+            unlockPage();
+            validateAdjustForm();
+            return;
+         }
+         finalDir = diff > 0 ? "increase" : "decrease";
+         finalQty = Math.abs(diff);
+         if (!confirm(`System says ${liveStock}, you counted ${counted}, change ${diff > 0 ? '+':''}${diff}. Confirm?`)) {
+            state.isSubmittingAdjust = false;
+            btn.textContent = "SUBMIT ADJUSTMENT";
+            unlockPage();
+            validateAdjustForm();
+            return;
+         }
+      } else {
+         if (finalDir === 'decrease' && finalQty > liveStock) {
+            err.textContent = `Cannot decrease by ${finalQty}. Only ${liveStock} in stock.`;
+            err.style.display = 'block';
+            state.isSubmittingAdjust = false;
+            btn.textContent = "SUBMIT ADJUSTMENT";
+            unlockPage();
+            validateAdjustForm();
+            return;
+         }
+         if (!confirm(`Adjust ${state.adjItem} by ${finalDir} ${finalQty}?`)) {
+            state.isSubmittingAdjust = false;
+            btn.textContent = "SUBMIT ADJUSTMENT";
+            unlockPage();
+            validateAdjustForm();
+            return;
+         }
+      }
+
+      btn.textContent = "PROCESSING...";
+      try {
+         const payload = { item: state.adjItem, branch, direction: finalDir, qty: finalQty, reason: reasonVal, notes: document.getElementById('adj-notes').value.trim() };
+         const res = await apiCall("submitStockAdjustment", payload, 'ana_admin_pending_adjust', `Adjust: ${finalDir} ${finalQty}x ${state.adjItem}`);
+         if (!res.success) {
+           err.textContent = res.error;
+           err.style.display = 'block';
+           btn.textContent = "SUBMIT ADJUSTMENT";
+           return;
+         }
+         localStorage.removeItem('ana_admin_pending_adjust');
+         showSuccess(res, 'adjust');
+         document.getElementById('adj-counted').value = "";
+         document.getElementById('adj-qty').value = "";
+         document.getElementById('adj-notes').value = "";
+         fetchLiveStockCache();
+      } catch(e) {
+         err.style.display = 'block';
+         if (e.message.includes("Session expired")) {
+           err.textContent = "Session expired. Log in and tap retry";
+           btn.textContent = "NOT CONFIRMED, TAP TO RETRY";
+           return;
+         }
+         err.textContent = "Network Error: " + e.message;
+         btn.textContent = "NOT CONFIRMED, TAP TO RETRY";
+      } finally {
+         state.isSubmittingAdjust = false;
+         unlockPage();
+         validateAdjustForm();
+      }
+    }
+
+    // ==========================================
+    // TRANSFER TAB
+    // ==========================================
+    function validateTransferForm() {
+      const qtyVal = document.getElementById('tr-qty').value.trim();
+      const qty = Number(qtyVal);
+      const source = document.getElementById('tr-source').value;
+      const dest = document.getElementById('tr-dest').value;
+      const btn = document.getElementById('btn-submit-transfer');
+      const reason = document.getElementById('tr-reason-text');
+
+      if (!state.trItem) {
+        btn.disabled = true; reason.textContent = "Select an item"; return;
+      }
+      if (source === dest) {
+        btn.disabled = true; reason.textContent = "Dest must differ from source"; return;
+      }
+      if (qtyVal === "" || !Number.isFinite(qty) || !Number.isInteger(qty) || qty <= 0) {
+        btn.disabled = true; reason.textContent = "Whole numbers only"; return;
+      }
+      btn.disabled = state.isSubmittingTransfer;
+      reason.textContent = "";
+    }
+
+    async function handleTransferSubmit() {
+      if (state.isSubmittingTransfer || !state.trItem) return;
+      state.isSubmittingTransfer = true;
+      const btn = document.getElementById('btn-submit-transfer');
+      btn.disabled = true;
+      const err = document.getElementById('tr-error');
+      err.style.display = 'none';
+
+      const qtyVal = document.getElementById('tr-qty').value.trim();
+      const qty = Number(qtyVal);
+      const source = document.getElementById('tr-source').value;
+      const dest = document.getElementById('tr-dest').value;
+
+      if (qtyVal === "" || !Number.isFinite(qty) || !Number.isInteger(qty) || qty <= 0 || source === dest) {
+        state.isSubmittingTransfer = false; validateTransferForm(); return;
+      }
+
+      lockPage();
+      btn.textContent = "CHECKING STOCK...";
+      let liveStock = 0;
+      try {
+        const stockData = await apiCall("getLiveInventory", { branch: source }, null, "", false);
+        if (stockData.success) {
+           const it = stockData.inventory.find(i => i.item === state.trItem);
+           if (it) liveStock = it.stock;
+        }
+      } catch(e) {
+         err.textContent = "Failed to read stock: " + e.message;
+         err.style.display = 'block';
+         state.isSubmittingTransfer = false;
+         btn.textContent = "SUBMIT TRANSFER";
+         unlockPage(); validateTransferForm(); return;
+      }
+
+      if (qty > liveStock) {
+         err.textContent = `Only ${liveStock} in stock at ${source}.`;
+         err.style.display = 'block';
+         state.isSubmittingTransfer = false;
+         btn.textContent = "SUBMIT TRANSFER";
+         unlockPage(); validateTransferForm(); return;
+      }
+
+      if (!confirm(`Transfer ${qty} x ${state.trItem} from ${source} to ${dest}?`)) {
+         state.isSubmittingTransfer = false;
+         btn.textContent = "SUBMIT TRANSFER";
+         unlockPage(); validateTransferForm(); return;
+      }
+
+      btn.textContent = "PROCESSING...";
+      try {
+         const payload = { item: state.trItem, sourceBranch: source, destBranch: dest, qty, notes: document.getElementById('tr-notes').value.trim() };
+         const res = await apiCall("submitTransfer", payload, 'ana_admin_pending_transfer', `Transfer: ${qty}x ${state.trItem}`);
+         if (!res.success) {
+           err.textContent = res.error;
+           err.style.display = 'block';
+           btn.textContent = "SUBMIT TRANSFER";
+           return;
+         }
+         localStorage.removeItem('ana_admin_pending_transfer');
+         showSuccess(res, 'transfer');
+         document.getElementById('tr-qty').value = "";
+         document.getElementById('tr-notes').value = "";
+         fetchLiveStockCache();
+      } catch(e) {
+         err.style.display = 'block';
+         if (e.message.includes("Session expired")) {
+           err.textContent = "Session expired. Log in and tap retry";
+           btn.textContent = "NOT CONFIRMED, TAP TO RETRY";
+           return;
+         }
+         err.textContent = "Network Error: " + e.message;
+         btn.textContent = "NOT CONFIRMED, TAP TO RETRY";
+      } finally {
+         state.isSubmittingTransfer = false;
+         unlockPage(); validateTransferForm();
+      }
+    }
+
+    // ==========================================
+    // KITS TAB
+    // ==========================================
+    async function fetchKitRecipes() {
+      const content = document.getElementById('kit-content');
+      const loading = document.getElementById('kit-loading');
+      
+      if (state.kits && state.kits.length > 0) {
+        loading.classList.add('hidden');
+        content.classList.remove('hidden');
+        populateKitSelect();
+        return;
+      }
+      
+      try {
+        const data = await apiCall("getKitRecipes", {}, null, "", false);
+        if (data.success && data.kits) {
+          state.kits = data.kits;
+          loading.classList.add('hidden');
+          content.classList.remove('hidden');
+          populateKitSelect();
+        } else {
+          loading.textContent = data.error || "Failed to load kits.";
+          loading.style.color = "#dc3545";
+        }
+      } catch (e) {
+        if (!e.message.includes("Session expired")) {
+          loading.textContent = e.message;
+          loading.style.color = "#dc3545";
+        }
+      }
+    }
+
+    function populateKitSelect() {
+      const sel = document.getElementById('kit-select');
+      sel.textContent = '';
+      const emptyOpt = document.createElement('option');
+      emptyOpt.value = "";
+      emptyOpt.textContent = "Select a kit...";
+      sel.appendChild(emptyOpt);
+      
+      state.kits.forEach(k => {
+        const o = document.createElement('option');
+        o.value = k.kit;
+        o.textContent = k.kit;
+        sel.appendChild(o);
+      });
+      validateKitForm();
+    }
+
+    function validateKitForm() {
+      const kitName = document.getElementById('kit-select').value;
+      const qtyVal = document.getElementById('kit-qty').value.trim();
+      const qty = Number(qtyVal);
+      const btn = document.getElementById('btn-submit-kit');
+      const reason = document.getElementById('kit-reason-text');
+      const partsList = document.getElementById('kit-parts-list');
+      
+      if (!kitName) {
+        btn.disabled = true; reason.textContent = "Select a kit"; partsList.textContent = "Select a kit to view parts"; return;
+      }
+      if (qtyVal === "" || !Number.isFinite(qty) || !Number.isInteger(qty) || qty <= 0) {
+        btn.disabled = true; reason.textContent = "Whole numbers only"; return;
+      }
+      
+      const kitDef = state.kits.find(k => k.kit === kitName);
+      if (!kitDef) return;
+      
+      partsList.textContent = '';
+      kitDef.components.forEach(comp => {
+        const req = comp.qty * qty;
+        const have = state.liveStockCache[comp.item] || 0;
+        const div = document.createElement('div');
+        div.textContent = `${req}x ${comp.item} (Have: ${have})`;
+        div.style.color = have >= req ? "#16a34a" : "#dc3545";
+        partsList.appendChild(div);
+      });
+      
+      btn.disabled = state.isSubmittingKit;
+      reason.textContent = "";
+    }
+
+    // ==========================================
+    // ADD ITEM TAB
+    // ==========================================
+    async function fetchCategories() {
+      const catSelect = document.getElementById('ai-category');
+      catSelect.textContent = '';
+      const loadOpt = document.createElement('option');
+      loadOpt.value = "";
+      loadOpt.textContent = "Loading...";
+      catSelect.appendChild(loadOpt);
+      
+      const errDiv = document.getElementById('additem-error');
+      errDiv.style.display = 'none';
+
+      try {
+        const data = await apiCall("getCategories", {}, null, "", false);
+        if (data.success && data.categories) {
+          catSelect.textContent = '';
+          const emptyOpt = document.createElement('option');
+          emptyOpt.value = "";
+          emptyOpt.textContent = "Select category...";
+          catSelect.appendChild(emptyOpt);
+          data.categories.forEach(c => {
+            const o = document.createElement('option');
+            o.value = c;
+            o.textContent = c;
+            catSelect.appendChild(o);
+          });
+          validateAddItemForm();
+        } else {
+          showAddCategoryError(data.error || "Failed to load categories.");
+        }
+      } catch(e) {
+        if (!e.message.includes("Session expired")) {
+          showAddCategoryError(e.message);
+        }
+      }
+    }
+
+    function showAddCategoryError(msg) {
+      const catSelect = document.getElementById('ai-category');
+      catSelect.textContent = '';
+      const errOpt = document.createElement('option');
+      errOpt.value = "";
+      errOpt.textContent = "Error loading";
+      catSelect.appendChild(errOpt);
+      
+      const errDiv = document.getElementById('additem-error');
+      errDiv.textContent = '';
+      const s = document.createElement('span');
+      s.textContent = msg + " ";
+      const b = document.createElement('button');
+      b.textContent = "Retry";
+      b.style.cssText = "width:auto; padding:4px 8px; margin:0; font-size:0.8rem;";
+      b.addEventListener('click', fetchCategories);
+      errDiv.appendChild(s);
+      errDiv.appendChild(b);
+      errDiv.style.display = 'block';
+    }
+
+    function validateAddItemForm() {
+      const name = document.getElementById('ai-name').value.trim();
+      const cat = document.getElementById('ai-category').value;
+      const priceVal = document.getElementById('ai-price').value.trim();
+      const price = Number(priceVal);
+      const costVal = document.getElementById('ai-cost').value.trim();
+      const cost = Number(costVal);
+      
+      const btn = document.getElementById('btn-submit-additem');
+      const reason = document.getElementById('ai-reason-text');
+
+      btn.disabled = true;
+
+      if (name.length < 1 || name.length > 80) {
+        reason.textContent = "Enter item name (1-80 chars)";
+        return;
+      }
+      const firstChar = name.charAt(0);
+      if (['=', '+', '-', '@'].includes(firstChar)) {
+        reason.textContent = "Name cannot start with = + - or @";
+        return;
+      }
+      
+      const exists = state.inventory.some(i => i.item.toLowerCase() === name.toLowerCase());
+      if (exists) {
+        reason.textContent = "Item already exists";
+        return;
+      }
+
+      if (!cat) {
+        reason.textContent = "Select a category";
+        return;
+      }
+      if (priceVal === "" || !Number.isFinite(price) || price <= 0) {
+        reason.textContent = "Enter valid price > 0";
+        return;
+      }
+      if (costVal === "" || !Number.isFinite(cost) || cost <= 0) {
+        reason.textContent = "Enter valid cost > 0";
+        return;
+      }
+
+      btn.disabled = state.isSubmittingAddItem;
+      reason.textContent = "";
+    }
+
+    async function handleAddItemSubmit() {
+      if (state.isSubmittingAddItem) return;
+      state.isSubmittingAddItem = true;
+      const btn = document.getElementById('btn-submit-additem');
+      btn.disabled = true;
+      const err = document.getElementById('additem-error');
+      err.style.display = 'none';
+
+      const name = document.getElementById('ai-name').value.trim();
+      const cat = document.getElementById('ai-category').value;
+      const priceVal = document.getElementById('ai-price').value.trim();
+      const price = Number(priceVal);
+      const costVal = document.getElementById('ai-cost').value.trim();
+      const cost = Number(costVal);
+
+      if (name.length < 1 || name.length > 80 || !cat || priceVal === "" || !Number.isFinite(price) || price <= 0 || costVal === "" || !Number.isFinite(cost) || cost <= 0) {
+        state.isSubmittingAddItem = false;
+        validateAddItemForm();
+        return;
+      }
+      
+      const firstChar = name.charAt(0);
+      if (['=', '+', '-', '@'].includes(firstChar)) {
+        state.isSubmittingAddItem = false; validateAddItemForm(); return;
+      }
+      if (state.inventory.some(i => i.item.toLowerCase() === name.toLowerCase())) {
+        state.isSubmittingAddItem = false; validateAddItemForm(); return;
+      }
+
+      if (!confirm(`Add ${name} (${cat}), price ${price}, cost ${cost}? Stock starts at 0. Use Restock to add stock.`)) {
+        state.isSubmittingAddItem = false; validateAddItemForm(); return;
+      }
+
+      if (price < cost) {
+        if (!confirm("Selling price is below cost. Continue?")) {
+          state.isSubmittingAddItem = false; validateAddItemForm(); return;
+        }
+      }
+
+      lockPage();
+      btn.textContent = "PROCESSING...";
+
+      try {
+        const payload = { item: name, category: cat, sellingPrice: price, unitCost: cost };
+        const data = await apiCall("addItem", payload, 'ana_admin_pending_additem', `Add Item: ${name}`);
+        
+        if (!data.success) {
+          if (data.error && data.error.toLowerCase().includes("already exists")) {
+             err.textContent = data.error + " If your last attempt was not confirmed, it may already have been added. The item list was refreshed.";
+             err.style.display = 'block';
+             btn.textContent = "ADD ITEM";
+             fetchItemList();
+             return;
+          }
+          err.textContent = data.error || "Transaction failed at server.";
+          err.style.display = 'block';
+          btn.textContent = "ADD ITEM";
+          return;
+        }
+
+        localStorage.removeItem('ana_admin_pending_additem');
+        showSuccess(data, 'additem', ["Starts with 0 stock. Use Restock to add stock."], data.item);
+        
+        document.getElementById('ai-name').value = "";
+        document.getElementById('ai-category').value = "";
+        document.getElementById('ai-price').value = "";
+        document.getElementById('ai-cost').value = "";
+        btn.textContent = "ADD ITEM";
+        
+        fetchItemList();
+        fetchLiveStockCache();
+
+      } catch(e) {
+        err.style.display = 'block';
+        if (e.message.includes("Session expired")) {
+          err.textContent = "Session expired. Log in and tap retry";
+          btn.textContent = "NOT CONFIRMED, TAP TO RETRY";
+          return;
+        }
+        err.textContent = "Network Error: " + e.message;
+        btn.textContent = "NOT CONFIRMED, TAP TO RETRY";
+      } finally {
+        state.isSubmittingAddItem = false;
+        unlockPage();
+        validateAddItemForm();
+      }
+    }
+
+    // ==========================================
+    // VOID TAB
+    // ==========================================
+    async function fetchRecentTransactions() {
+      const vl = document.getElementById('void-list');
+      const loadMoreBtn = document.getElementById('btn-void-load-more');
+      vl.textContent = '';
+      const loadMsg = document.createElement('div');
+      loadMsg.style.cssText = "padding:15px; text-align:center; color:#666;";
+      loadMsg.textContent = "Loading transactions...";
+      vl.appendChild(loadMsg);
+      loadMoreBtn.classList.add('hidden');
+
+      try {
+        const data = await apiCall("getRecentTransactions", { limit: state.voidLimit }, null, "", false);
+        vl.textContent = '';
+        if (data.success) {
+          state.voidList = data.items || [];
+          renderVoidList();
+          if (state.voidList.length >= state.voidLimit && state.voidLimit < 100) {
+             loadMoreBtn.classList.remove('hidden');
+          }
+        } else {
+          showVoidListError(data.error || "Failed to load transactions.");
+        }
+      } catch(e) {
+        if (!e.message.includes("Session expired")) {
+          showVoidListError(e.message);
+        }
+      }
+    }
+
+    function showVoidListError(msg) {
+      const vl = document.getElementById('void-list');
+      vl.textContent = '';
+      const wrap = document.createElement('div');
+      wrap.style.cssText = "padding:15px; text-align:center; color:#dc3545;";
+      const textNode = document.createElement('span');
+      textNode.textContent = msg + " ";
+      const btn = document.createElement('button');
+      btn.style.cssText = "width:auto; padding:4px 8px; margin:0; font-size:0.8rem;";
+      btn.textContent = "Retry";
+      btn.addEventListener('click', () => {
+         if (checkPendingWarning()) fetchRecentTransactions();
+      });
+      wrap.appendChild(textNode);
+      wrap.appendChild(btn);
+      vl.appendChild(wrap);
+    }
+
+    function renderVoidList() {
+      const vl = document.getElementById('void-list');
+      vl.textContent = '';
+
+      if (state.voidList.length === 0) {
+        const empty = document.createElement('div');
+        empty.style.cssText = "padding:15px; text-align:center; color:#666;";
+        empty.textContent = "No recent transactions found.";
+        vl.appendChild(empty);
+        return;
+      }
+
+      const groups = [];
+      const map = {};
+      const allRefs = new Set();
+      
+      state.voidList.forEach(row => {
+        allRefs.add(row.ref);
+        if (!map[row.ref]) {
+          map[row.ref] = { ref: row.ref, time: row.time, branch: row.branch, rows: [] };
+          groups.push(map[row.ref]);
+        }
+        map[row.ref].rows.push(row);
+      });
+
+      groups.forEach(g => {
+        const div = document.createElement('div');
+        div.className = "inv-item";
+        div.style.flexDirection = "column";
+        div.style.alignItems = "flex-start";
+        
+        const headerRow = document.createElement('div');
+        headerRow.style.display = "flex";
+        headerRow.style.justifyContent = "space-between";
+        headerRow.style.width = "100%";
+        headerRow.style.marginBottom = "5px";
+
+        const refSpan = document.createElement('span');
+        refSpan.style.fontFamily = "monospace";
+        refSpan.style.fontWeight = "bold";
+        refSpan.textContent = g.ref;
+
+        const dateObj = new Date(g.time);
+        const dStr = `${dateObj.getMonth()+1}/${dateObj.getDate()} ${dateObj.getHours()}:${String(dateObj.getMinutes()).padStart(2,'0')}`;
+        const dateSpan = document.createElement('span');
+        dateSpan.style.fontSize = "0.8rem";
+        dateSpan.style.color = "#666";
+        dateSpan.textContent = dStr;
+
+        headerRow.appendChild(refSpan);
+        headerRow.appendChild(dateSpan);
+        div.appendChild(headerRow);
+
+        let hasMoneyMove = false;
+        g.rows.forEach(r => {
+          if (["Capital Injection", "Capital Withdrawal", "Internal Transfer", "Debt Repayment"].includes(r.type)) {
+             hasMoneyMove = true;
+          }
+          const rowDiv = document.createElement('div');
+          rowDiv.style.fontSize = "0.85rem";
+          rowDiv.style.width = "100%";
+          rowDiv.style.display = "flex";
+          rowDiv.style.justifyContent = "space-between";
+          rowDiv.style.borderBottom = "1px solid #f0f0f0";
+          rowDiv.style.padding = "2px 0";
+
+          const descSpan = document.createElement('span');
+          descSpan.style.color = "#444";
+          descSpan.textContent = `[${r.type}] ${r.description}`;
+
+          const amtSpan = document.createElement('span');
+          amtSpan.style.fontWeight = "bold";
+          amtSpan.textContent = r.amount.toFixed(2);
+
+          rowDiv.appendChild(descSpan);
+          rowDiv.appendChild(amtSpan);
+          div.appendChild(rowDiv);
+        });
+
+        let unselectableReason = null;
+        if (g.ref.startsWith("VOID-")) {
+          unselectableReason = "Void entry";
+        } else if (hasMoneyMove) {
+          unselectableReason = "Cannot be voided here (money move)";
+        } else if (allRefs.has("VOID-" + g.ref)) {
+          unselectableReason = "Already voided";
+        }
+
+        if (unselectableReason) {
+          div.classList.add('disabled');
+          const reasonDiv = document.createElement('div');
+          reasonDiv.style.marginTop = "5px";
+          reasonDiv.style.fontSize = "0.8rem";
+          reasonDiv.style.color = "#888";
+          reasonDiv.style.fontStyle = "italic";
+          reasonDiv.textContent = unselectableReason;
+          div.appendChild(reasonDiv);
+        } else {
+          div.addEventListener('click', () => {
+            if (!checkPendingWarning()) return;
+            loadVoidCard(g.ref, g.rows, g.time);
+          });
+        }
+
+        vl.appendChild(div);
+      });
+    }
+
+    function loadVoidCard(ref, rows, originalDate) {
+      state.voidRef = ref;
+      document.getElementById('void-action-card').classList.remove('hidden');
+      document.getElementById('void-ref-title').textContent = ref;
+      
+      const dateObj = new Date(originalDate);
+      const dStr = `${dateObj.getMonth()+1}/${dateObj.getDate()}/${dateObj.getFullYear()} ${dateObj.getHours()}:${String(dateObj.getMinutes()).padStart(2,'0')}`;
+      document.getElementById('void-ref-date').textContent = "Date: " + dStr;
+      
+      const rowsContainer = document.getElementById('void-ref-rows');
+      rowsContainer.textContent = '';
+      rows.forEach(r => {
+          const rowDiv = document.createElement('div');
+          rowDiv.style.display = "flex";
+          rowDiv.style.justifyContent = "space-between";
+          rowDiv.style.marginBottom = "4px";
+          const dSpan = document.createElement('span');
+          dSpan.textContent = `[${r.type}] ${r.description}`;
+          const aSpan = document.createElement('span');
+          aSpan.style.fontWeight = "bold";
+          aSpan.textContent = r.amount.toFixed(2);
+          rowDiv.appendChild(dSpan);
+          rowDiv.appendChild(aSpan);
+          rowsContainer.appendChild(rowDiv);
+      });
+      
+      document.getElementById('void-reason').value = "";
+      document.getElementById('void-error').style.display = 'none';
+      validateVoidForm();
+      document.getElementById('void-action-card').scrollIntoView({behavior: "smooth"});
+    }
+
+    function validateVoidForm() {
+      const reason = document.getElementById('void-reason').value.trim();
+      const btn = document.getElementById('btn-submit-void');
+      const rText = document.getElementById('void-reason-text');
+
+      if (!state.voidRef) {
+        btn.disabled = true; rText.textContent = "Select a transaction"; return;
+      }
+      if (reason.length < 3 || reason.length > 200) {
+        btn.disabled = true; rText.textContent = "Enter reason (3-200 chars)"; return;
+      }
+
+      btn.disabled = state.isSubmittingVoid;
+      rText.textContent = "";
+    }
+
+    async function handleVoidSubmit() {
+      if (state.isSubmittingVoid) return;
+      state.isSubmittingVoid = true;
+      const btn = document.getElementById('btn-submit-void');
+      btn.disabled = true;
+      const err = document.getElementById('void-error');
+      err.style.display = 'none';
+
+      const reason = document.getElementById('void-reason').value.trim();
+      if (!state.voidRef || reason.length < 3 || reason.length > 200) {
+        state.isSubmittingVoid = false; validateVoidForm(); return;
+      }
+
+      let extraWarning = "";
+      if (state.voidRef.startsWith("RSTK-")) {
+        extraWarning = "\nStock added by this restock will be removed.";
+      } else if (state.voidRef.startsWith("POS-")) {
+        extraWarning = "\nStock goes back and the sale and payment are reversed. If the customer already repaid part of a credit sale, their balance may go below zero.";
+      } else if (state.voidRef.startsWith("REP-")) {
+        extraWarning = "\nThe customer's debt is restored.";
+      }
+
+      if (!confirm(`Void ${state.voidRef}? This writes reversing entries dated today. Stock and money return. This cannot be undone.${extraWarning}`)) {
+        state.isSubmittingVoid = false; validateVoidForm(); return;
+      }
+
+      lockPage();
+      btn.textContent = "PROCESSING...";
+
+      try {
+        const payload = { transId: state.voidRef, reason: reason };
+        const data = await apiCall("voidTransaction", payload, 'ana_admin_pending_void', `Void: ${state.voidRef}`);
+        
+        if (!data.success) {
+          err.textContent = data.error || "Transaction failed at server.";
+          err.style.display = 'block';
+          btn.textContent = "VOID TRANSACTION";
+          return;
+        }
+
+        localStorage.removeItem('ana_admin_pending_void');
+        
+        let lines = [];
+        if (data.originalDate) {
+           const doObj = new Date(data.originalDate);
+           const doStr = `${doObj.getMonth()+1}/${doObj.getDate()}/${doObj.getFullYear()} ${doObj.getHours()}:${String(doObj.getMinutes()).padStart(2,'0')}`;
+           lines.push(`Original date: ${doStr}`);
+        }
+        if (data.rowsWritten) {
+           let rArr = [];
+           if (data.rowsWritten.sales) rArr.push(`${data.rowsWritten.sales} sales`);
+           if (data.rowsWritten.inventory) rArr.push(`${data.rowsWritten.inventory} inventory`);
+           if (data.rowsWritten.expense) rArr.push(`${data.rowsWritten.expense} expense`);
+           if (data.rowsWritten.ar) rArr.push(`${data.rowsWritten.ar} AR`);
+           if (data.rowsWritten.capital) rArr.push(`${data.rowsWritten.capital} capital`);
+           if (rArr.length > 0) lines.push("Rows written: " + rArr.join(", "));
+        }
+        lines.push("Reversal entries are dated today, so profit corrections land in this week.");
+        
+        showSuccess(data, 'void', lines, data.transId);
+        
+        state.voidRef = "";
+        document.getElementById('void-action-card').classList.add('hidden');
+        document.getElementById('void-reason').value = "";
+        btn.textContent = "VOID TRANSACTION";
+        
+        fetchRecentTransactions();
+
+      } catch(e) {
+        err.style.display = 'block';
+        if (e.message.includes("Session expired")) {
+          err.textContent = "Session expired. Log in and tap retry";
+          btn.textContent = "NOT CONFIRMED, TAP TO RETRY";
+          return;
+        }
+        err.textContent = "Network Error: " + e.message;
+        btn.textContent = "NOT CONFIRMED, TAP TO RETRY";
+      } finally {
+        state.isSubmittingVoid = false;
+        unlockPage();
+        validateVoidForm();
+      }
+    }
+
+    // ==========================================
+    // RE-DECLARED FIXES (HOISTED OVERWRITES)
+    // ==========================================
+    async function handleKitSubmit() {
+      if (state.isSubmittingKit) return;
+      const kitName = document.getElementById('kit-select').value;
+      const mode = document.getElementById('kit-mode').value;
+      const qtyVal = document.getElementById('kit-qty').value.trim();
+      const qty = Number(qtyVal);
+      if (!kitName || qtyVal === "" || !Number.isFinite(qty) || !Number.isInteger(qty) || qty <= 0) return;
+
+      state.isSubmittingKit = true;
+      const btn = document.getElementById('btn-submit-kit');
+      btn.disabled = true;
+      const err = document.getElementById('kit-error');
+      err.style.display = 'none';
+
+      const branch = document.getElementById('admin-branch-select').value;
+
+      lockPage();
+      btn.textContent = "CHECKING STOCK...";
+      let liveStockMap = {};
+      try {
+        const stockData = await apiCall("getLiveInventory", { branch }, null, "", false);
+        if (stockData.success) {
+           stockData.inventory.forEach(i => liveStockMap[i.item] = i.stock);
+        }
+      } catch(e) {
+         err.textContent = "Failed to read stock: " + e.message;
+         err.style.display = 'block';
+         state.isSubmittingKit = false;
+         btn.textContent = "SUBMIT CONVERSION";
+         unlockPage();
+         validateKitForm();
+         return;
+      }
+
+      const kitDef = state.kits.find(k => k.kit === kitName);
+      if (!kitDef) {
+        state.isSubmittingKit = false;
+        unlockPage();
+        validateKitForm();
+        return;
+      }
+
+      if (mode === 'breakdown') {
+         if (liveStockMap[kitName] === undefined) {
+            err.textContent = "Item not found in live stock (it may be missing a price or cost in Inventory Master).";
+            err.style.display = 'block';
+            state.isSubmittingKit = false;
+            btn.textContent = "SUBMIT CONVERSION";
+            unlockPage();
+            validateKitForm();
+            return;
+         }
+         const kitStock = liveStockMap[kitName];
+         if (qty > kitStock) {
+            err.textContent = `Only ${kitStock} ${kitName} in stock. Cannot breakdown ${qty}.`;
+            err.style.display = 'block';
+            state.isSubmittingKit = false;
+            btn.textContent = "SUBMIT CONVERSION";
+            unlockPage();
+            validateKitForm();
+            return;
+         }
+      } else {
+         for (let comp of kitDef.components) {
+            if (liveStockMap[comp.item] === undefined) {
+               err.textContent = `Item not found in live stock (it may be missing a price or cost in Inventory Master): ${comp.item}`;
+               err.style.display = 'block';
+               state.isSubmittingKit = false;
+               btn.textContent = "SUBMIT CONVERSION";
+               unlockPage();
+               validateKitForm();
+               return;
+            }
+            const req = comp.qty * qty;
+            const have = liveStockMap[comp.item];
+            if (req > have) {
+               err.textContent = `Need ${req} ${comp.item}, but only ${have} in stock.`;
+               err.style.display = 'block';
+               state.isSubmittingKit = false;
+               btn.textContent = "SUBMIT CONVERSION";
+               unlockPage();
+               validateKitForm();
+               return;
+            }
+         }
+      }
+
+      if (!confirm(`${mode === 'breakdown' ? 'Breakdown' : 'Rebuild'} ${qty} x ${kitName}?`)) {
+         state.isSubmittingKit = false;
+         btn.textContent = "SUBMIT CONVERSION";
+         unlockPage();
+         validateKitForm();
+         return;
+      }
+
+      btn.textContent = "PROCESSING...";
+      try {
+         const payload = { kit: kitName, mode, qty, branch, notes: document.getElementById('kit-notes').value.trim() };
+         const res = await apiCall("submitKitConversion", payload, 'ana_admin_pending_kit', `Kit: ${mode} ${qty}x ${kitName}`);
+         if (!res.success) {
+           err.textContent = res.error;
+           err.style.display = 'block';
+           btn.textContent = "SUBMIT CONVERSION";
+           return;
+         }
+         localStorage.removeItem('ana_admin_pending_kit');
+         
+         let lines = [];
+         if (res.costDifference !== undefined) {
+            lines.push(`Kit cost minus parts cost: ${res.costDifference} (positive means the kit is worth more than its parts)`);
+         }
+         showSuccess(res, 'kit', lines, res.transId);
+         document.getElementById('kit-qty').value = "1";
+         document.getElementById('kit-notes').value = "";
+         fetchLiveStockCache();
+      } catch(e) {
+         err.style.display = 'block';
+         if (e.message.includes("Session expired")) {
+           err.textContent = "Session expired. Log in and tap retry";
+           btn.textContent = "NOT CONFIRMED, TAP TO RETRY";
+           return;
+         }
+         err.textContent = "Network Error: " + e.message;
+         btn.textContent = "NOT CONFIRMED, TAP TO RETRY";
+      } finally {
+         state.isSubmittingKit = false;
+         unlockPage();
+         validateKitForm();
+      }
+    }
+
+    function showSuccess(data, tab, extraLines = [], idText = null) {
       document.getElementById('success-screen').style.display = 'flex';
-      document.getElementById('success-trans-id').textContent = data.transId || "LOGGED";
+      const transIdContainer = document.getElementById('success-trans-id');
+      transIdContainer.textContent = ''; 
+      
+      let idsToRender = [];
+      if (idText) {
+        idsToRender = [{ id: idText, duplicateBlocked: data.duplicateBlocked, message: data.message }];
+      } else if (data.transIds) {
+        idsToRender = data.transIds;
+      } else if (data.transId) {
+        idsToRender = [{ id: data.transId, duplicateBlocked: data.duplicateBlocked, message: data.message }];
+      } else {
+        idsToRender = [{ id: "LOGGED", message: data.message }];
+      }
+
+      idsToRender.forEach(item => {
+        const div = document.createElement('div');
+        div.style.marginBottom = "5px";
+        div.textContent = item.id;
+        const isDup = item.duplicateBlocked || (item.message && item.message.toLowerCase().includes("already")) || (data.message && data.message.toLowerCase().includes("already"));
+        if (isDup) {
+          const dupMsg = document.createElement('div');
+          dupMsg.style.color = "#ffcc00";
+          dupMsg.style.fontSize = "0.9rem";
+          dupMsg.textContent = "Already recorded earlier. Nothing new was written.";
+          div.appendChild(dupMsg);
+        }
+        transIdContainer.appendChild(div);
+      });
       
       const detailsDiv = document.getElementById('success-details');
-      detailsDiv.innerHTML = '';
+      detailsDiv.textContent = '';
+      
+      if (extraLines && extraLines.length > 0) {
+        extraLines.forEach(lineText => {
+           const p = document.createElement('div');
+           p.textContent = lineText;
+           detailsDiv.appendChild(p);
+        });
+      }
       
       if (tab === 'restock' && data.costChanged && data.costChanged.length > 0) {
         const p1 = document.createElement('p');
@@ -1004,22 +3277,28 @@
     // EVENT BINDINGS
     // ==========================================
     function bindEvents() {
-      // Form Input Edit Trackers for Error Label Reset
-      document.getElementById('tab-restock').addEventListener('input', () => {
-        const btn = document.getElementById('btn-submit-restock');
-        if (btn.textContent === "NOT CONFIRMED, TAP TO RETRY") btn.textContent = "SUBMIT RESTOCK";
-      });
-
-      document.getElementById('tab-expense').addEventListener('input', () => {
-        const btn = document.getElementById('btn-submit-expense');
-        if (btn.textContent === "NOT CONFIRMED, TAP TO RETRY") btn.textContent = "SUBMIT EXPENSE";
-      });
+      const applyResetBtn = (tabId, btnId, defaultText) => {
+         const el = document.getElementById(tabId);
+         if(el) el.addEventListener('input', () => {
+            const btn = document.getElementById(btnId);
+            if (btn && btn.textContent === "NOT CONFIRMED, TAP TO RETRY") btn.textContent = defaultText;
+         });
+      };
+      applyResetBtn('tab-restock', 'btn-submit-restock', 'SUBMIT RESTOCK');
+      applyResetBtn('tab-expense', 'btn-submit-expense', 'SUBMIT EXPENSE');
+      applyResetBtn('tab-damaged', 'btn-submit-damaged', 'SUBMIT DAMAGED/LOST');
+      applyResetBtn('tab-adjust', 'btn-submit-adjust', 'SUBMIT ADJUSTMENT');
+      applyResetBtn('tab-transfer', 'btn-submit-transfer', 'SUBMIT TRANSFER');
+      applyResetBtn('tab-kits', 'btn-submit-kit', 'SUBMIT CONVERSION');
+      applyResetBtn('tab-additem', 'btn-submit-additem', 'ADD ITEM');
+      applyResetBtn('tab-void', 'btn-submit-void', 'VOID TRANSACTION');
 
       document.getElementById('admin-branch-select').addEventListener('input', () => {
-        const rsBtn = document.getElementById('btn-submit-restock');
-        if (rsBtn.textContent === "NOT CONFIRMED, TAP TO RETRY") rsBtn.textContent = "SUBMIT RESTOCK";
-        const exBtn = document.getElementById('btn-submit-expense');
-        if (exBtn.textContent === "NOT CONFIRMED, TAP TO RETRY") exBtn.textContent = "SUBMIT EXPENSE";
+        const resetB = (id, txt) => { const b = document.getElementById(id); if (b && b.textContent==="NOT CONFIRMED, TAP TO RETRY") b.textContent=txt; };
+        resetB('btn-submit-restock', 'SUBMIT RESTOCK'); resetB('btn-submit-expense', 'SUBMIT EXPENSE');
+        resetB('btn-submit-damaged', 'SUBMIT DAMAGED/LOST'); resetB('btn-submit-adjust', 'SUBMIT ADJUSTMENT');
+        resetB('btn-submit-transfer', 'SUBMIT TRANSFER'); resetB('btn-submit-kit', 'SUBMIT CONVERSION');
+        resetB('btn-submit-additem', 'ADD ITEM');
       });
 
       // Login
@@ -1031,50 +3310,134 @@
       const branchSel = document.getElementById('admin-branch-select');
       branchSel.addEventListener('focus', (e) => {
         branchSel.dataset.prev = branchSel.value;
-        handleInputFocus(e, ['ana_admin_pending_restock', 'ana_admin_pending_expense']);
+        handleInputFocus(e);
       });
       branchSel.addEventListener('change', (e) => {
-        const record = getUnacknowledgedPending(['ana_admin_pending_restock', 'ana_admin_pending_expense']);
-        if (record) {
-          const p = record.pending;
-          const msg = p.summary ? ` (${p.summary})` : '';
-          if (!confirm(`Your last submission${msg} was not confirmed and may already be recorded. Check before continuing.`)) {
-            branchSel.value = branchSel.dataset.prev;
-            updateBranchLabels();
-            return;
-          } else {
-            p.acknowledged = true;
-            localStorage.setItem(record.key, JSON.stringify(p));
-          }
+        if (!checkPendingWarning()) {
+          branchSel.value = branchSel.dataset.prev;
+          updateBranchLabels();
+          return;
         }
         branchSel.dataset.prev = branchSel.value;
         updateBranchLabels();
+        fetchLiveStockCache(); 
       });
       
       // Tabs
       document.getElementById('nav-restock').addEventListener('click', () => switchTab('restock'));
       document.getElementById('nav-expense').addEventListener('click', () => switchTab('expense'));
+      document.getElementById('nav-money').addEventListener('click', () => switchTab('money'));
+      document.getElementById('nav-debtors').addEventListener('click', () => switchTab('debtors'));
+      document.getElementById('nav-damaged').addEventListener('click', () => switchTab('damaged'));
+      document.getElementById('nav-adjust').addEventListener('click', () => switchTab('adjust'));
+      document.getElementById('nav-transfer').addEventListener('click', () => switchTab('transfer'));
+      document.getElementById('nav-kits').addEventListener('click', () => switchTab('kits'));
+      document.getElementById('nav-additem').addEventListener('click', () => switchTab('additem'));
+      document.getElementById('nav-void').addEventListener('click', () => switchTab('void'));
       
       // Restock Tab
       document.getElementById('rs-inv-search').addEventListener('input', renderRsInventory);
       document.getElementById('rs-inv-category').addEventListener('change', renderRsInventory);
       document.getElementById('btn-submit-restock').addEventListener('click', handleRestockSubmit);
-      
-      // Inputs tracking for Pending Guards & Totals
-      document.querySelectorAll('.rs-input').forEach(input => {
-        input.addEventListener('focus', (e) => handleInputFocus(e, ['ana_admin_pending_restock']));
-      });
-      document.querySelectorAll('.rs-pay-input').forEach(input => {
-        input.addEventListener('input', updateRestockTotals);
-      });
+      document.querySelectorAll('.rs-input').forEach(input => { input.addEventListener('focus', handleInputFocus); });
+      document.querySelectorAll('.rs-pay-input').forEach(input => { input.addEventListener('input', updateRestockTotals); });
       document.getElementById('rs-supplier').addEventListener('input', updateRestockTotals);
 
       // Expense Tab
-      document.querySelectorAll('.ex-input').forEach(input => {
-        input.addEventListener('focus', (e) => handleInputFocus(e, ['ana_admin_pending_expense']));
-      });
-      document.getElementById('ex-amount').addEventListener('input', validateExpenseForm);
+      document.querySelectorAll('.ex-input').forEach(input => { input.addEventListener('focus', handleInputFocus); });
+      document.querySelectorAll('.ex-pay-input').forEach(input => { input.addEventListener('input', validateExpenseForm); });
       document.getElementById('btn-submit-expense').addEventListener('click', handleExpenseSubmit);
+      document.getElementById('btn-stop-expense').addEventListener('click', () => {
+        state.expenseStopRequested = true;
+        if (state.splitStatus) alert(`Recorded: ${state.splitStatus.recorded.join(", ") || "None"}\nNot Confirmed/Skipped: ${state.splitStatus.unconfirmed.join(", ")}`);
+        resetExpenseForm();
+      });
+
+      // Money Tab
+      document.getElementById('btn-refresh-treasury').addEventListener('click', () => fetchTreasury(false));
+      document.querySelectorAll('.mon-input').forEach(input => {
+        input.addEventListener('focus', handleInputFocus);
+        input.addEventListener('input', () => {
+          const reason = document.getElementById('mon-reason');
+          if (reason.textContent === "NOT CONFIRMED, TAP TO RETRY") reason.textContent = "";
+          validateMoneyForm();
+        });
+      });
+      document.getElementById('btn-mon-deposit').addEventListener('click', () => handleMoneySubmit('deposit'));
+      document.getElementById('btn-mon-withdraw').addEventListener('click', () => handleMoneySubmit('withdraw'));
+      document.getElementById('btn-mon-move').addEventListener('click', () => handleMoneySubmit('move'));
+
+      // Debtors Tab
+      document.getElementById('btn-refresh-debtors').addEventListener('click', () => fetchDebtors(false));
+      document.getElementById('debtor-search').addEventListener('input', renderDebtors);
+      document.querySelectorAll('.dh-input').forEach(input => {
+        input.addEventListener('focus', handleInputFocus);
+        input.addEventListener('input', () => {
+          if (input.id === 'dh-pay-amount') validateDebtorForm();
+          const btn = document.getElementById('btn-submit-repay');
+          if (btn.textContent === "NOT CONFIRMED, TAP TO RETRY") btn.textContent = "SUBMIT REPAYMENT";
+        });
+      });
+      document.getElementById('btn-submit-repay').addEventListener('click', handleRepaySubmit);
+
+      // Damaged Tab
+      document.getElementById('dmg-inv-search').addEventListener('input', () => renderInventoryList('dmg', 'dmgItem'));
+      document.querySelectorAll('.dmg-input').forEach(input => {
+        input.addEventListener('focus', handleInputFocus);
+        input.addEventListener('input', validateDamagedForm);
+      });
+      document.getElementById('btn-submit-damaged').addEventListener('click', handleDamagedSubmit);
+
+      // Adjust Tab
+      document.getElementById('adj-inv-search').addEventListener('input', () => renderInventoryList('adj', 'adjItem'));
+      document.getElementById('adj-mode').addEventListener('change', (e) => {
+         if (e.target.value === 'counted') { document.getElementById('adj-counted-block').classList.remove('hidden'); document.getElementById('adj-manual-block').classList.add('hidden'); }
+         else { document.getElementById('adj-counted-block').classList.add('hidden'); document.getElementById('adj-manual-block').classList.remove('hidden'); }
+         validateAdjustForm();
+      });
+      document.querySelectorAll('.adj-input').forEach(input => {
+        input.addEventListener('focus', handleInputFocus);
+        input.addEventListener('input', validateAdjustForm);
+      });
+      document.getElementById('btn-submit-adjust').addEventListener('click', handleAdjustSubmit);
+
+      // Transfer Tab
+      document.getElementById('tr-inv-search').addEventListener('input', () => renderInventoryList('tr', 'trItem'));
+      document.querySelectorAll('.tr-input').forEach(input => {
+        input.addEventListener('focus', handleInputFocus);
+        input.addEventListener('input', validateTransferForm);
+      });
+      document.getElementById('btn-submit-transfer').addEventListener('click', handleTransferSubmit);
+
+      // Kits Tab
+      document.querySelectorAll('.kit-input').forEach(input => {
+        input.addEventListener('focus', handleInputFocus);
+        input.addEventListener('input', validateKitForm);
+      });
+      document.getElementById('btn-submit-kit').addEventListener('click', handleKitSubmit);
+
+      // Add Item Tab
+      document.querySelectorAll('.ai-input').forEach(input => {
+        input.addEventListener('focus', handleInputFocus);
+        input.addEventListener('input', validateAddItemForm);
+      });
+      document.getElementById('btn-submit-additem').addEventListener('click', handleAddItemSubmit);
+
+      // Void Tab
+      document.getElementById('btn-refresh-void').addEventListener('click', () => {
+         if (checkPendingWarning()) fetchRecentTransactions();
+      });
+      document.getElementById('btn-void-load-more').addEventListener('click', () => {
+         if (!checkPendingWarning()) return;
+         if (state.voidLimit === 30) state.voidLimit = 60;
+         else state.voidLimit = 100;
+         fetchRecentTransactions();
+      });
+      document.querySelectorAll('.void-input').forEach(input => {
+        input.addEventListener('focus', handleInputFocus);
+        input.addEventListener('input', validateVoidForm);
+      });
+      document.getElementById('btn-submit-void').addEventListener('click', handleVoidSubmit);
 
       // Success Screen
       document.getElementById('btn-dismiss-success').addEventListener('click', () => {
