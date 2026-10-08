@@ -344,6 +344,7 @@
     function loadInventory(data) {
       if (!data || !Array.isArray(data)) return;
       inventoryData = data;
+      alert("RAW DATA: " + JSON.stringify(data[0]));
       const select = document.getElementById('item-select');
       const currentVal = select.value;
       select.innerHTML = '<option value="">-- Select Product --</option>';
