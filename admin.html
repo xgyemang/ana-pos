@@ -1,0 +1,1086 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0">
+  <style>
+    /* Full Viewport Enforcers */
+    html, body { 
+      width: 100%; 
+      min-height: 100vh; 
+      margin: 0; 
+      padding: 0; 
+      box-sizing: border-box; 
+      -webkit-text-size-adjust: 100%; 
+    }
+    body { 
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+      background: #f0f2f5; 
+      padding: 10px; 
+      color: #111; 
+    }
+    .card { background: #fff; padding: 15px; border-radius: 10px; margin-bottom: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    h2 { margin: 0 0 15px 0; font-size: 1.2rem; border-bottom: 2px solid #000; padding-bottom: 5px; }
+    label { display: block; margin-top: 10px; font-weight: 600; font-size: 0.85rem; color: #444; }
+    select, input, button, textarea { width: 100%; padding: 12px; margin-top: 4px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 16px; background: #fff;}
+    textarea { resize: vertical; min-height: 80px; }
+    button { background: #000; color: #fff; font-weight: bold; border: none; margin-top: 15px; text-transform: uppercase; letter-spacing: 1px; cursor: pointer; }
+    button:disabled { background: #aaa; cursor: not-allowed; }
+    
+    .btn-remove { background: #dc3545; color: white; padding: 6px 12px; border: none; border-radius: 4px; width: auto; font-size: 0.8rem; margin:0;}
+    
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    
+    .header-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    #staff-badge { font-size: 0.75rem; color: #666; font-weight: bold; text-transform: uppercase; }
+    .btn-logout { background: transparent; color: #dc3545; border: 1px solid #dc3545; padding: 4px 8px; font-size: 0.7rem; margin: 0; width: auto; border-radius: 4px; }
+    
+    .error { color: #dc3545; font-weight: bold; text-align: center; margin-bottom: 10px; display: none; }
+    
+    .login-overlay, .success-overlay { 
+      position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; 
+      display: flex; justify-content: center; align-items: center; flex-direction: column; 
+      z-index: 999; 
+    }
+    .login-overlay { background: #f0f2f5; color: #000; overflow-y: auto; }
+    .success-overlay { display: none; background: rgba(0,0,0,0.95); color: #fff; text-align: center; }
+    .success-overlay h1, .login-overlay h1 { font-size: 2rem; margin-bottom: 10px; text-align: center; border: none; }
+    
+    .hidden { display: none !important; }
+
+    /* Tabs Navigation */
+    .tab-nav { display: flex; gap: 10px; margin-bottom: 15px; }
+    .tab-nav button { margin: 0; background: #444; flex: 1; padding: 12px; font-size: 0.9rem; }
+    .tab-nav button.active { background: #007bff; }
+
+    /* Inventory Selection Styles */
+    .inventory-list { max-height: 200px; overflow-y: auto; border: 1px solid #ccc; border-radius: 6px; margin-top: 10px; background: #fafafa; }
+    .inv-item { padding: 12px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+    .inv-item:last-child { border-bottom: none; }
+    .inv-item-details { display: flex; flex-direction: column; }
+    .inv-item-name { font-weight: 600; font-size: 1rem; }
+    .inv-item-meta { font-size: 0.8rem; color: #666; }
+
+    /* Line Items */
+    .line-item { display: flex; flex-direction: column; padding: 10px 0; border-bottom: 1px solid #eee; gap: 8px;}
+    .line-item-header { display: flex; justify-content: space-between; align-items: center; font-weight: bold;}
+    .line-item-controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap;}
+    .line-item-controls input { margin: 0; padding: 8px; width: 80px; }
+
+    /* Payment Summary */
+    .summary-row { display: flex; justify-content: space-between; font-size: 1.1rem; margin-top: 5px; }
+    .summary-balance { font-size: 1.2rem; font-weight: bold; border-top: 1px solid #ccc; padding-top: 5px; margin-top: 5px; }
+    
+    #success-details { margin-top: 15px; font-size: 0.9rem; color: #eee; width: 90%; max-width: 400px; text-align: left; background: #222; padding: 10px; border-radius: 6px; }
+    
+    /* Page Lock Overlay */
+    .busy-overlay { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 99999; background: transparent; display: none; }
+  </style>
+</head>
+<body>
+
+  <!-- PAGE LOCK OVERLAY -->
+  <div id="busy-overlay" class="busy-overlay"></div>
+
+  <!-- PIN LOGIN SCREEN -->
+  <div id="login-screen" class="login-overlay hidden">
+    <div style="width: 80%; max-width: 300px; background: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); margin: auto;">
+      <h1>ANA ADMIN</h1>
+      <label style="text-align: center;">Enter Admin PIN</label>
+      <input type="password" id="pin-input" style="text-align: center; font-size: 1.5rem; letter-spacing: 5px;" pattern="[0-9]*" inputmode="numeric">
+      <button id="login-btn">LOGIN</button>
+      <div id="login-error" class="error" style="margin-top:15px; font-size: 0.85rem;"></div>
+    </div>
+  </div>
+
+  <!-- HEADER -->
+  <div class="header-bar">
+    <div><strong>ANA</strong> / ADMIN</div>
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <select id="admin-branch-select" style="padding: 4px; margin: 0; width: auto; background: #fff;">
+        <option value="AdjeiMess Hostel">AdjeiMess</option>
+        <option value="Winta Hostel">Winta</option>
+      </select>
+      <button class="btn-logout" id="logout-btn">Logout</button>
+    </div>
+  </div>
+
+  <!-- TAB NAVIGATION -->
+  <div class="tab-nav">
+    <button id="nav-restock" class="active">Restock</button>
+    <button id="nav-expense">Expense</button>
+  </div>
+
+  <!-- ==========================================
+       RESTOCK TAB
+       ========================================== -->
+  <div id="tab-restock">
+    <div class="card">
+      <h2>1. ADD ITEMS TO RESTOCK</h2>
+      <div class="grid-2">
+        <input type="search" id="rs-inv-search" placeholder="Search product...">
+        <select id="rs-inv-category">
+          <option value="All">All Categories</option>
+        </select>
+      </div>
+      <div class="inventory-list" id="rs-inventory-list">
+        <div style="padding:15px; text-align:center; color:#666;">Loading items...</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>2. RESTOCK LINES</h2>
+      <div id="rs-lines-container"></div>
+    </div>
+
+    <div class="card">
+      <h2>3. SUPPLIER DETAILS</h2>
+      <label>Supplier Name (Required)</label>
+      <input type="text" id="rs-supplier" class="rs-input" placeholder="e.g., Frank Accessories">
+      
+      <label>Supplier Charge (Delivery/Transport)</label>
+      <input type="number" id="rs-supplier-charge" class="rs-input rs-pay-input" value="" placeholder="0" min="0" step="0.01">
+      
+      <label>Notes (Optional)</label>
+      <textarea id="rs-notes" class="rs-input" placeholder="Any details..."></textarea>
+    </div>
+
+    <div class="card">
+      <h2>4. PAYMENTS</h2>
+      <div class="grid-2">
+        <div><label>Cash Paid</label><input type="number" id="rs-cash" class="rs-input rs-pay-input" value="" placeholder="0" min="0" step="0.01"></div>
+        <div><label>MoMo Paid</label><input type="number" id="rs-momo" class="rs-input rs-pay-input" value="" placeholder="0" min="0" step="0.01"></div>
+      </div>
+      <label>Bank Paid</label><input type="number" id="rs-bank" class="rs-input rs-pay-input" value="" placeholder="0" min="0" step="0.01">
+      
+      <div style="margin-top: 15px; background: #fafafa; padding: 10px; border-radius: 6px; border: 1px solid #ddd;">
+        <div class="summary-row"><span>Goods Total:</span> <span id="rs-goods-total">0.00</span></div>
+        <div class="summary-row"><span>Supplier Charge:</span> <span id="rs-charge-total">0.00</span></div>
+        <div class="summary-row summary-balance" style="color:#000;"><span>Total to Pay:</span> <span id="rs-total-to-pay">0.00</span></div>
+        <div class="summary-row" style="margin-top:10px;"><span>Total Paid:</span> <span id="rs-total-paid">0.00</span></div>
+        <div class="summary-row summary-balance" id="rs-diff-row"><span>Difference:</span> <span id="rs-diff">0.00</span></div>
+      </div>
+      
+      <div id="rs-error" class="error" style="margin-top:15px; font-size: 0.9rem;"></div>
+      
+      <div style="display: flex; align-items: center; gap: 10px; margin-top: 15px; flex-wrap: wrap;">
+        <button id="btn-submit-restock" disabled style="margin-top: 0; flex: 0 0 auto;">SUBMIT RESTOCK</button>
+        <div style="display:flex; flex-direction:column; flex:1;">
+          <span id="rs-submit-branch" style="font-size: 0.85rem; color: #666; font-weight: bold;"></span>
+          <span id="rs-submit-reason" style="color: #dc3545; font-size: 0.85rem; font-weight: bold;">No items to restock</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       EXPENSE TAB
+       ========================================== -->
+  <div id="tab-expense" class="hidden">
+    <div class="card">
+      <h2>LOG EXPENSE</h2>
+      
+      <label>Category</label>
+      <select id="ex-category" class="ex-input">
+        <option value="Transport">Transport</option>
+        <option value="Delivery">Delivery</option>
+        <option value="Data / Internet">Data / Internet</option>
+        <option value="Packaging">Packaging</option>
+        <option value="Supplier Charge">Supplier Charge</option>
+        <option value="Repairs / Replacement">Repairs / Replacement</option>
+        <option value="Other">Other</option>
+      </select>
+
+      <label>Amount</label>
+      <input type="number" id="ex-amount" class="ex-input" value="" placeholder="0" min="0" step="0.01">
+
+      <label>Paid From Wallet</label>
+      <select id="ex-wallet" class="ex-input">
+        <option value="Cash">Cash</option>
+        <option value="MoMo">MoMo</option>
+        <option value="Bank">Bank</option>
+      </select>
+
+      <label>Notes (Optional)</label>
+      <textarea id="ex-notes" class="ex-input" placeholder="Expense details..."></textarea>
+      
+      <div id="ex-error" class="error" style="margin-top:15px; font-size: 0.9rem;"></div>
+      <div style="display: flex; align-items: center; gap: 10px; margin-top: 15px; flex-wrap: wrap;">
+        <button id="btn-submit-expense" disabled style="margin-top: 0; flex: 0 0 auto;">SUBMIT EXPENSE</button>
+        <span id="ex-submit-branch" style="font-size: 0.85rem; color: #666; font-weight: bold; flex: 1;"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- SUCCESS SCREEN -->
+  <div id="success-screen" class="success-overlay">
+    <h1>SUCCESS</h1>
+    <p style="margin-bottom: 5px; font-size: 1.1rem; color: #ccc;">Transaction logged to ledger.</p>
+    <p id="success-trans-id" style="margin-bottom: 10px; font-size: 1.5rem; font-family: monospace; color: #4ade80;"></p>
+    <div id="success-details"></div>
+    <button style="width: 80%; max-width: 300px; background: #007bff; padding: 15px; border-radius: 8px; font-size: 1.2rem; margin-top:25px;" id="btn-dismiss-success">DISMISS</button>
+  </div>
+
+  <script>
+    // ==========================================
+    // CONFIGURATION & GLOBAL STATE
+    // ==========================================
+    const API_URL = 'https://script.google.com/macros/s/AKfycbyScU76FT_DCDLPkte-yl5BrsL2HJliLPZGcKrAtsy1YeoSHY5aa48-OIIeL9d6mJwlkg/exec';
+    const round2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
+    
+    let state = {
+      user: null, 
+      token: null,
+      currentTab: 'restock',
+      inventory: [],
+      restockLines: [],
+      isSubmittingRestock: false,
+      isSubmittingExpense: false
+    };
+
+    try {
+      const savedUser = localStorage.getItem('ana_admin_user');
+      const savedToken = localStorage.getItem('ana_admin_token');
+      if (savedUser && savedToken) {
+        state.user = JSON.parse(savedUser);
+        state.token = savedToken;
+      }
+    } catch (e) { console.warn("Local storage parse error", e); }
+
+    // ==========================================
+    // PAGE LOCK
+    // ==========================================
+    function lockPage() {
+      if (document.activeElement && document.activeElement.blur) {
+        document.activeElement.blur();
+      }
+      document.getElementById('busy-overlay').style.display = 'block';
+      document.getElementById('tab-restock').inert = true;
+      document.getElementById('tab-expense').inert = true;
+      document.querySelector('.header-bar').inert = true;
+      document.querySelector('.tab-nav').inert = true;
+    }
+    
+    function unlockPage() {
+      document.getElementById('busy-overlay').style.display = 'none';
+      document.getElementById('tab-restock').inert = false;
+      document.getElementById('tab-expense').inert = false;
+      document.querySelector('.header-bar').inert = false;
+      document.querySelector('.tab-nav').inert = false;
+    }
+
+    // ==========================================
+    // TAB REGISTRY
+    // ==========================================
+    const TABS = {
+      restock: {
+        containerId: 'tab-restock',
+        btnId: 'nav-restock',
+        init: () => {
+          if (state.inventory.length === 0) fetchItemList();
+          renderRestockLines(); 
+          updateRestockTotals();
+        }
+      },
+      expense: {
+        containerId: 'tab-expense',
+        btnId: 'nav-expense',
+        init: () => validateExpenseForm()
+      }
+    };
+
+    function switchTab(tabName) {
+      if (!TABS[tabName]) return;
+      Object.keys(TABS).forEach(k => {
+        document.getElementById(TABS[k].containerId).classList.add('hidden');
+        document.getElementById(TABS[k].btnId).classList.remove('active');
+      });
+      document.getElementById(TABS[tabName].containerId).classList.remove('hidden');
+      document.getElementById(TABS[tabName].btnId).classList.add('active');
+      state.currentTab = tabName;
+      TABS[tabName].init();
+    }
+
+    // ==========================================
+    // CORE API WRAPPER
+    // ==========================================
+    async function apiCall(action, payload = {}, pendingKey = null, summaryStr = "") {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); 
+      
+      const body = { action: action, token: state.token, payload: payload };
+
+      if (pendingKey) {
+        let pending = JSON.parse(localStorage.getItem(pendingKey) || 'null');
+        if (pending && JSON.stringify(pending.payload) === JSON.stringify(payload)) {
+          body.requestId = pending.requestId;
+          pending.uncertain = true;
+          pending.summary = summaryStr;
+          localStorage.setItem(pendingKey, JSON.stringify(pending));
+        } else {
+          body.requestId = 'REQ-' + crypto.randomUUID();
+          localStorage.setItem(pendingKey, JSON.stringify({
+            requestId: body.requestId,
+            payload: payload,
+            uncertain: true,
+            acknowledged: false,
+            summary: summaryStr
+          }));
+        }
+      }
+
+      try {
+        const response = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(body),
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        const data = await response.json();
+        
+        if (pendingKey) {
+           let pending = JSON.parse(localStorage.getItem(pendingKey) || 'null');
+           if (pending) {
+              pending.uncertain = false;
+              localStorage.setItem(pendingKey, JSON.stringify(pending));
+           }
+        }
+        
+        if (data.sessionExpired) {
+          handleLogout(true);
+          throw new Error("Session expired. Please login again.");
+        }
+        return data;
+      } catch (err) {
+        clearTimeout(timeoutId);
+        if (err.name === 'AbortError') throw new Error("Network timeout (30s). Check your connection.");
+        throw err;
+      }
+    }
+
+    // ==========================================
+    // INITIALIZATION & GUARDS
+    // ==========================================
+    document.addEventListener("DOMContentLoaded", () => {
+      bindEvents();
+      if (state.token && state.user) {
+        if (state.user.role !== 'admin') {
+          handleLogout(false, "Admin only. Access denied.");
+          return;
+        }
+        document.getElementById('login-screen').classList.add('hidden');
+        updateBranchLabels();
+        TABS[state.currentTab].init();
+      } else {
+        document.getElementById('login-screen').classList.remove('hidden');
+      }
+    });
+
+    function getUnacknowledgedPending(keys) {
+      for (let k of keys) {
+        const str = localStorage.getItem(k);
+        if (str) {
+          const p = JSON.parse(str);
+          if (p.uncertain && !p.acknowledged) return { key: k, pending: p };
+        }
+      }
+      return null;
+    }
+
+    function checkPendingWarning(keys) {
+      const record = getUnacknowledgedPending(keys);
+      if (record) {
+        const p = record.pending;
+        const msg = p.summary ? ` (${p.summary})` : '';
+        if (!confirm(`Your last submission${msg} was not confirmed and may already be recorded. Check before continuing.`)) {
+          return false;
+        }
+        p.acknowledged = true;
+        localStorage.setItem(record.key, JSON.stringify(p));
+      }
+      return true;
+    }
+
+    function handleInputFocus(e, keys) {
+      const record = getUnacknowledgedPending(keys);
+      if (record) {
+        const p = record.pending;
+        const msg = p.summary ? ` (${p.summary})` : '';
+        if (!confirm(`Your last submission${msg} was not confirmed and may already be recorded. Check before continuing.`)) {
+          e.target.blur();
+        } else {
+          p.acknowledged = true;
+          localStorage.setItem(record.key, JSON.stringify(p));
+        }
+      }
+    }
+
+    function getActivePendingKey() {
+      return state.currentTab === 'restock' ? 'ana_admin_pending_restock' : 'ana_admin_pending_expense';
+    }
+
+    function updateBranchLabels() {
+      const val = document.getElementById('admin-branch-select').value;
+      const rsLabel = document.getElementById('rs-submit-branch');
+      if (rsLabel) rsLabel.textContent = `Branch: ${val}`;
+      const exLabel = document.getElementById('ex-submit-branch');
+      if (exLabel) exLabel.textContent = `Branch: ${val}`;
+    }
+
+    // ==========================================
+    // AUTHENTICATION
+    // ==========================================
+    async function handleLogin() {
+      const btn = document.getElementById('login-btn');
+      if (btn.disabled) return;
+      
+      const pinInput = document.getElementById('pin-input');
+      const errDiv = document.getElementById('login-error');
+      const pin = pinInput.value.trim();
+
+      errDiv.style.display = 'none';
+      if (!/^\d{6,}$/.test(pin)) {
+        errDiv.textContent = "PIN must be at least 6 digits.";
+        errDiv.style.display = 'block';
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = "VERIFYING...";
+
+      try {
+        const data = await apiCall("login", { pin: pin });
+        if (!data.success) throw new Error(data.error || "Login failed");
+        
+        if (data.user.role !== 'admin') {
+          state.token = data.token; 
+          try { await apiCall("logout"); } catch(e) {}
+          state.token = null;
+          throw new Error("Admin only. Access denied.");
+        }
+
+        state.token = data.token;
+        state.user = data.user;
+        localStorage.setItem('ana_admin_token', data.token);
+        localStorage.setItem('ana_admin_user', JSON.stringify(data.user));
+        
+        pinInput.value = "";
+        document.getElementById('login-screen').classList.add('hidden');
+        updateBranchLabels();
+        TABS[state.currentTab].init();
+
+      } catch (err) {
+        errDiv.textContent = err.message;
+        errDiv.style.display = 'block';
+        pinInput.value = "";
+        localStorage.removeItem('ana_admin_token');
+        localStorage.removeItem('ana_admin_user');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "LOGIN";
+      }
+    }
+
+    async function handleLogout(isExpiry = false, forceMsg = null) {
+      if (!isExpiry && !forceMsg) {
+        if (!confirm("Are you sure you want to logout? Unsubmitted data will be lost.")) return;
+      }
+
+      if (state.token && !forceMsg) {
+        try { await apiCall("logout"); } catch(e) {} 
+      }
+      
+      state.token = null;
+      state.user = null;
+      localStorage.removeItem('ana_admin_token');
+      localStorage.removeItem('ana_admin_user');
+
+      if (!isExpiry && !forceMsg) {
+        state.restockLines = [];
+        resetRestockForm();
+        resetExpenseForm();
+      }
+      
+      const errDiv = document.getElementById('login-error');
+      if (forceMsg) {
+        errDiv.textContent = forceMsg;
+        errDiv.style.display = 'block';
+      } else {
+        errDiv.style.display = 'none';
+      }
+
+      document.getElementById('login-screen').classList.remove('hidden');
+    }
+
+    // ==========================================
+    // GET ITEM LIST (RESTOCK TAB)
+    // ==========================================
+    async function fetchItemList() {
+      const listDiv = document.getElementById('rs-inventory-list');
+      listDiv.innerHTML = '<div style="padding:15px; text-align:center; color:#666;">Loading items...</div>';
+      try {
+        const data = await apiCall("getItemList", {});
+        if (data.success && data.items) {
+          state.inventory = data.items;
+          populateRsCategories();
+          renderRsInventory();
+        } else {
+          showRsInvError(data.error || "Failed to load items.");
+        }
+      } catch (err) {
+        if (!err.message.includes("Session expired")) showRsInvError(err.message);
+      }
+    }
+
+    function showRsInvError(msg) {
+      const listDiv = document.getElementById('rs-inventory-list');
+      listDiv.innerHTML = '';
+      const wrap = document.createElement('div');
+      wrap.style.cssText = "padding:15px; text-align:center; color:#dc3545;";
+      const textNode = document.createElement('span');
+      textNode.textContent = msg;
+      wrap.appendChild(textNode);
+      wrap.appendChild(document.createElement('br'));
+      wrap.appendChild(document.createElement('br'));
+      const btn = document.createElement('button');
+      btn.style.cssText = "width:auto; padding:8px 16px;";
+      btn.textContent = "Retry";
+      btn.addEventListener('click', fetchItemList);
+      wrap.appendChild(btn);
+      listDiv.appendChild(wrap);
+    }
+
+    function populateRsCategories() {
+      const catSelect = document.getElementById('rs-inv-category');
+      const currentVal = catSelect.value;
+      const cats = new Set(state.inventory.map(i => i.category).filter(Boolean));
+      catSelect.innerHTML = '';
+      
+      const allOpt = document.createElement('option');
+      allOpt.value = "All";
+      allOpt.textContent = "All Categories";
+      catSelect.appendChild(allOpt);
+
+      Array.from(cats).sort().forEach(cat => {
+        const opt = document.createElement('option');
+        opt.value = cat;
+        opt.textContent = cat;
+        catSelect.appendChild(opt);
+      });
+      if (cats.has(currentVal)) catSelect.value = currentVal;
+    }
+
+    function renderRsInventory() {
+      const listDiv = document.getElementById('rs-inventory-list');
+      const searchTerm = document.getElementById('rs-inv-search').value.toLowerCase();
+      const catFilter = document.getElementById('rs-inv-category').value;
+      
+      listDiv.innerHTML = '';
+
+      const filtered = state.inventory.filter(item => {
+        const matchesSearch = item.item.toLowerCase().includes(searchTerm);
+        const matchesCat = catFilter === "All" || item.category === catFilter;
+        return matchesSearch && matchesCat;
+      });
+
+      if (filtered.length === 0) {
+        const empty = document.createElement('div');
+        empty.style.cssText = "padding:15px; text-align:center; color:#666;";
+        empty.textContent = "No items found.";
+        listDiv.appendChild(empty);
+        return;
+      }
+
+      filtered.forEach(item => {
+        const div = document.createElement('div');
+        div.className = "inv-item";
+        
+        const details = document.createElement('div');
+        details.className = "inv-item-details";
+        
+        const name = document.createElement('span');
+        name.className = "inv-item-name";
+        name.textContent = item.item;
+        
+        const meta = document.createElement('span');
+        meta.className = "inv-item-meta";
+        meta.textContent = `${item.category}`;
+        
+        details.appendChild(name);
+        details.appendChild(meta);
+
+        const price = document.createElement('span');
+        price.style.fontWeight = 'bold';
+        price.style.color = '#007bff';
+        price.textContent = "+ ADD";
+
+        div.appendChild(details);
+        div.appendChild(price);
+
+        div.addEventListener('click', () => handleAddRestockLine(item));
+        listDiv.appendChild(div);
+      });
+    }
+
+    // ==========================================
+    // RESTOCK LINES MANAGEMENT
+    // ==========================================
+    function handleAddRestockLine(itemObj) {
+      if (!checkPendingWarning(['ana_admin_pending_restock'])) return;
+      
+      const existing = state.restockLines.find(r => r.item === itemObj.item);
+      if (existing) {
+        existing.qty += 1;
+        existing._qtyInvalid = false;
+      } else {
+        state.restockLines.push({
+          item: itemObj.item,
+          qty: 1,
+          unitCost: round2(Number(itemObj.unitCost) || 0),
+          _qtyInvalid: false,
+          _costInvalid: (Number(itemObj.unitCost) || 0) <= 0
+        });
+      }
+      renderRestockLines();
+    }
+
+    function removeRestockLine(index) {
+      if (!checkPendingWarning(['ana_admin_pending_restock'])) return;
+      state.restockLines.splice(index, 1);
+      renderRestockLines();
+    }
+
+    function updateRestockLineQty(index, val) {
+      if (val.trim() === '') {
+        state.restockLines[index]._qtyInvalid = true;
+      } else {
+        const qty = Number(val);
+        if (Number.isFinite(qty) && Number.isInteger(qty) && qty >= 1) {
+          state.restockLines[index].qty = qty;
+          state.restockLines[index]._qtyInvalid = false;
+        } else {
+          state.restockLines[index]._qtyInvalid = true;
+        }
+      }
+      updateRestockTotals();
+    }
+
+    function updateRestockLineCost(index, val) {
+      if (val.trim() === '') {
+        state.restockLines[index]._costInvalid = true;
+      } else {
+        const cost = Number(val);
+        if (Number.isFinite(cost) && cost > 0) {
+          state.restockLines[index].unitCost = round2(cost);
+          state.restockLines[index]._costInvalid = false;
+        } else {
+          state.restockLines[index]._costInvalid = true;
+        }
+      }
+      updateRestockTotals();
+    }
+
+    function renderRestockLines() {
+      const container = document.getElementById('rs-lines-container');
+      container.innerHTML = '';
+      
+      if (state.restockLines.length === 0) {
+        const empty = document.createElement('div');
+        empty.style.cssText = "text-align:center; color:#888; font-size:0.8rem; padding: 10px;";
+        empty.textContent = "No items added to restock yet.";
+        container.appendChild(empty);
+        updateRestockTotals();
+        return;
+      }
+
+      state.restockLines.forEach((line, index) => {
+        const itemDiv = document.createElement('div');
+        itemDiv.className = 'line-item';
+        
+        const headerDiv = document.createElement('div');
+        headerDiv.className = 'line-item-header';
+        
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = line.item;
+        
+        const rmBtn = document.createElement('button');
+        rmBtn.className = 'btn-remove';
+        rmBtn.textContent = 'X';
+        rmBtn.addEventListener('click', () => removeRestockLine(index));
+        
+        headerDiv.appendChild(nameSpan);
+        headerDiv.appendChild(rmBtn);
+
+        const controlsDiv = document.createElement('div');
+        controlsDiv.className = 'line-item-controls';
+        
+        const qtyLabel = document.createElement('span');
+        qtyLabel.textContent = "Qty:";
+        
+        const qtyInput = document.createElement('input');
+        qtyInput.type = "number";
+        qtyInput.min = "1";
+        qtyInput.value = line._qtyInvalid ? "" : line.qty;
+        qtyInput.className = "rs-input";
+        qtyInput.addEventListener('focus', (e) => handleInputFocus(e, ['ana_admin_pending_restock']));
+        qtyInput.addEventListener('input', (e) => updateRestockLineQty(index, e.target.value));
+        
+        const costLabel = document.createElement('span');
+        costLabel.textContent = "Cost ea:";
+        
+        const costInput = document.createElement('input');
+        costInput.type = "number";
+        costInput.step = "0.01";
+        costInput.min = "0.01";
+        costInput.value = line._costInvalid ? "" : line.unitCost.toFixed(2);
+        costInput.className = "rs-input";
+        costInput.addEventListener('focus', (e) => handleInputFocus(e, ['ana_admin_pending_restock']));
+        costInput.addEventListener('input', (e) => updateRestockLineCost(index, e.target.value));
+        
+        controlsDiv.appendChild(qtyLabel);
+        controlsDiv.appendChild(qtyInput);
+        controlsDiv.appendChild(costLabel);
+        controlsDiv.appendChild(costInput);
+
+        itemDiv.appendChild(headerDiv);
+        itemDiv.appendChild(controlsDiv);
+        container.appendChild(itemDiv);
+      });
+      updateRestockTotals();
+    }
+
+    function getVal(id) {
+      const val = parseFloat(document.getElementById(id).value);
+      return isNaN(val) ? 0 : val;
+    }
+
+    function updateRestockTotals() {
+      let goodsTotal = 0;
+      let lineErrors = null;
+      
+      state.restockLines.forEach(r => {
+        if (r._qtyInvalid) lineErrors = `Invalid qty for ${r.item}`;
+        else if (r._costInvalid) lineErrors = `Unit cost must be > 0 for ${r.item}`;
+        else goodsTotal = round2(goodsTotal + round2(r.qty * r.unitCost));
+      });
+
+      const supplierCharge = round2(getVal('rs-supplier-charge'));
+      const totalToPay = round2(goodsTotal + supplierCharge);
+      
+      const paidCash = round2(getVal('rs-cash'));
+      const paidMomo = round2(getVal('rs-momo'));
+      const paidBank = round2(getVal('rs-bank'));
+      const totalPaid = round2(paidCash + paidMomo + paidBank);
+      
+      const diff = round2(totalPaid - totalToPay);
+
+      document.getElementById('rs-goods-total').textContent = goodsTotal.toFixed(2);
+      document.getElementById('rs-charge-total').textContent = supplierCharge.toFixed(2);
+      document.getElementById('rs-total-to-pay').textContent = totalToPay.toFixed(2);
+      document.getElementById('rs-total-paid').textContent = totalPaid.toFixed(2);
+      
+      const diffEl = document.getElementById('rs-diff');
+      diffEl.textContent = diff.toFixed(2);
+      
+      const btn = document.getElementById('btn-submit-restock');
+      const supplier = document.getElementById('rs-supplier').value.trim();
+
+      if (diff !== 0) {
+        diffEl.parentElement.style.color = "#dc3545";
+      } else {
+        diffEl.parentElement.style.color = "#16a34a";
+      }
+
+      let reason = "";
+      if (state.restockLines.length === 0) reason = "No items to restock";
+      else if (lineErrors) reason = lineErrors;
+      else if (!supplier) reason = "Supplier name required";
+      else if (supplierCharge < 0 || paidCash < 0 || paidMomo < 0 || paidBank < 0) reason = "Values cannot be negative";
+      else if (diff !== 0) reason = `Difference must be 0 (is ${diff.toFixed(2)})`;
+
+      const reasonEl = document.getElementById('rs-submit-reason');
+      if (reason) {
+        btn.disabled = true;
+        reasonEl.textContent = reason;
+      } else {
+        btn.disabled = state.isSubmittingRestock;
+        reasonEl.textContent = "";
+      }
+    }
+
+    async function handleRestockSubmit() {
+      if (state.restockLines.length === 0) return;
+      if (state.isSubmittingRestock) return;
+      if (state.restockLines.some(r => r._qtyInvalid || r._costInvalid)) return;
+
+      const btn = document.getElementById('btn-submit-restock');
+      const err = document.getElementById('rs-error');
+      err.style.display = 'none';
+
+      state.isSubmittingRestock = true;
+      lockPage();
+      updateRestockTotals();
+
+      try {
+        const payments = [];
+        const cash = round2(getVal('rs-cash'));
+        const momo = round2(getVal('rs-momo'));
+        const bank = round2(getVal('rs-bank'));
+        
+        if (cash > 0) payments.push({ wallet: "Cash", amount: cash });
+        if (momo > 0) payments.push({ wallet: "MoMo", amount: momo });
+        if (bank > 0) payments.push({ wallet: "Bank", amount: bank });
+
+        const payload = {
+          branch: document.getElementById('admin-branch-select').value,
+          supplier: document.getElementById('rs-supplier').value.trim(),
+          supplierCharge: round2(getVal('rs-supplier-charge')),
+          notes: document.getElementById('rs-notes').value.trim(),
+          items: state.restockLines.map(r => {
+             const q = r.qty;
+             const c = r.unitCost;
+             if (!Number.isInteger(q) || q < 1 || c <= 0) throw new Error("Payload rebuild failed due to invalid internal state.");
+             return { item: r.item, qty: q, unitCost: c };
+          }),
+          payments: payments
+        };
+
+        const goodsTotal = payload.items.reduce((sum, r) => round2(sum + round2(r.qty * r.unitCost)), 0);
+        const totalToPay = round2(goodsTotal + payload.supplierCharge);
+
+        btn.textContent = "PROCESSING...";
+
+        const summaryStr = `Supplier: ${payload.supplier}, Total: ${totalToPay}`;
+        const data = await apiCall("submitRestockBatch", payload, 'ana_admin_pending_restock', summaryStr);
+        
+        if (!data.success) {
+          err.textContent = data.error || "Transaction failed at server.";
+          err.style.display = 'block';
+          btn.textContent = "SUBMIT RESTOCK";
+          return;
+        }
+
+        localStorage.removeItem('ana_admin_pending_restock');
+        showSuccess(data, 'restock');
+        resetRestockForm();
+
+      } catch (e) {
+        if (e.message.includes("Session expired")) {
+           btn.textContent = "SUBMIT RESTOCK";
+           return;
+        } else if (e.message.includes("Payload rebuild")) {
+           err.textContent = e.message;
+           err.style.display = 'block';
+           btn.textContent = "SUBMIT RESTOCK";
+           return;
+        }
+        err.textContent = "Network Error: " + e.message;
+        err.style.display = 'block';
+        btn.textContent = "NOT CONFIRMED, TAP TO RETRY";
+      } finally {
+        state.isSubmittingRestock = false;
+        unlockPage();
+        updateRestockTotals();
+      }
+    }
+
+    function resetRestockForm() {
+      state.restockLines = [];
+      renderRestockLines();
+      document.getElementById('rs-supplier').value = "";
+      document.getElementById('rs-supplier-charge').value = "";
+      document.getElementById('rs-notes').value = "";
+      document.getElementById('rs-cash').value = "";
+      document.getElementById('rs-momo').value = "";
+      document.getElementById('rs-bank').value = "";
+      document.getElementById('rs-error').style.display = 'none';
+      document.getElementById('btn-submit-restock').textContent = "SUBMIT RESTOCK";
+      updateRestockTotals();
+    }
+
+    // ==========================================
+    // EXPENSE MANAGEMENT
+    // ==========================================
+    function validateExpenseForm() {
+      const btn = document.getElementById('btn-submit-expense');
+      const amt = round2(getVal('ex-amount'));
+      btn.disabled = (state.isSubmittingExpense || amt <= 0);
+    }
+
+    async function handleExpenseSubmit() {
+      if (state.isSubmittingExpense) return;
+
+      const btn = document.getElementById('btn-submit-expense');
+      const err = document.getElementById('ex-error');
+      err.style.display = 'none';
+
+      const amount = round2(getVal('ex-amount'));
+      if (amount <= 0) return;
+
+      state.isSubmittingExpense = true;
+      lockPage();
+      validateExpenseForm();
+
+      try {
+        const payload = {
+          amount: amount,
+          wallet: document.getElementById('ex-wallet').value,
+          category: document.getElementById('ex-category').value,
+          notes: document.getElementById('ex-notes').value.trim(),
+          branch: document.getElementById('admin-branch-select').value
+        };
+
+        btn.textContent = "PROCESSING...";
+
+        const summaryStr = `Amount: ${payload.amount}, Category: ${payload.category}`;
+        const data = await apiCall("submitExpense", payload, 'ana_admin_pending_expense', summaryStr);
+        
+        if (!data.success) {
+          err.textContent = data.error || "Transaction failed at server.";
+          err.style.display = 'block';
+          btn.textContent = "SUBMIT EXPENSE";
+          return;
+        }
+
+        localStorage.removeItem('ana_admin_pending_expense');
+        showSuccess(data, 'expense');
+        resetExpenseForm();
+
+      } catch (e) {
+        if (e.message.includes("Session expired")) {
+           btn.textContent = "SUBMIT EXPENSE";
+           return;
+        }
+        err.textContent = "Network Error: " + e.message;
+        err.style.display = 'block';
+        btn.textContent = "NOT CONFIRMED, TAP TO RETRY";
+      } finally {
+        state.isSubmittingExpense = false;
+        unlockPage();
+        validateExpenseForm();
+      }
+    }
+
+    function resetExpenseForm() {
+      document.getElementById('ex-amount').value = "";
+      document.getElementById('ex-wallet').value = "Cash";
+      document.getElementById('ex-category').value = "Transport";
+      document.getElementById('ex-notes').value = "";
+      document.getElementById('ex-error').style.display = 'none';
+      document.getElementById('btn-submit-expense').textContent = "SUBMIT EXPENSE";
+      validateExpenseForm();
+    }
+
+    // ==========================================
+    // SUCCESS UI
+    // ==========================================
+    function showSuccess(data, tab) {
+      document.getElementById('success-screen').style.display = 'flex';
+      document.getElementById('success-trans-id').textContent = data.transId || "LOGGED";
+      
+      const detailsDiv = document.getElementById('success-details');
+      detailsDiv.innerHTML = '';
+      
+      if (tab === 'restock' && data.costChanged && data.costChanged.length > 0) {
+        const p1 = document.createElement('p');
+        p1.textContent = "Unit Cost in Inventory Master was NOT changed.";
+        p1.style.color = "#ffcc00";
+        p1.style.fontWeight = "bold";
+        p1.style.marginBottom = "8px";
+        p1.style.marginTop = "0";
+        detailsDiv.appendChild(p1);
+        
+        data.costChanged.forEach(c => {
+           const div = document.createElement('div');
+           div.textContent = `• ${c.item}: Old ${c.old} -> New ${c.new}`;
+           detailsDiv.appendChild(div);
+        });
+      }
+    }
+
+    // ==========================================
+    // EVENT BINDINGS
+    // ==========================================
+    function bindEvents() {
+      // Form Input Edit Trackers for Error Label Reset
+      document.getElementById('tab-restock').addEventListener('input', () => {
+        const btn = document.getElementById('btn-submit-restock');
+        if (btn.textContent === "NOT CONFIRMED, TAP TO RETRY") btn.textContent = "SUBMIT RESTOCK";
+      });
+
+      document.getElementById('tab-expense').addEventListener('input', () => {
+        const btn = document.getElementById('btn-submit-expense');
+        if (btn.textContent === "NOT CONFIRMED, TAP TO RETRY") btn.textContent = "SUBMIT EXPENSE";
+      });
+
+      document.getElementById('admin-branch-select').addEventListener('input', () => {
+        const rsBtn = document.getElementById('btn-submit-restock');
+        if (rsBtn.textContent === "NOT CONFIRMED, TAP TO RETRY") rsBtn.textContent = "SUBMIT RESTOCK";
+        const exBtn = document.getElementById('btn-submit-expense');
+        if (exBtn.textContent === "NOT CONFIRMED, TAP TO RETRY") exBtn.textContent = "SUBMIT EXPENSE";
+      });
+
+      // Login
+      document.getElementById('pin-input').addEventListener('keyup', (e) => { if (e.key === 'Enter') handleLogin(); });
+      document.getElementById('login-btn').addEventListener('click', handleLogin);
+      document.getElementById('logout-btn').addEventListener('click', () => handleLogout(false));
+      
+      // Branch Guard
+      const branchSel = document.getElementById('admin-branch-select');
+      branchSel.addEventListener('focus', (e) => {
+        branchSel.dataset.prev = branchSel.value;
+        handleInputFocus(e, ['ana_admin_pending_restock', 'ana_admin_pending_expense']);
+      });
+      branchSel.addEventListener('change', (e) => {
+        const record = getUnacknowledgedPending(['ana_admin_pending_restock', 'ana_admin_pending_expense']);
+        if (record) {
+          const p = record.pending;
+          const msg = p.summary ? ` (${p.summary})` : '';
+          if (!confirm(`Your last submission${msg} was not confirmed and may already be recorded. Check before continuing.`)) {
+            branchSel.value = branchSel.dataset.prev;
+            updateBranchLabels();
+            return;
+          } else {
+            p.acknowledged = true;
+            localStorage.setItem(record.key, JSON.stringify(p));
+          }
+        }
+        branchSel.dataset.prev = branchSel.value;
+        updateBranchLabels();
+      });
+      
+      // Tabs
+      document.getElementById('nav-restock').addEventListener('click', () => switchTab('restock'));
+      document.getElementById('nav-expense').addEventListener('click', () => switchTab('expense'));
+      
+      // Restock Tab
+      document.getElementById('rs-inv-search').addEventListener('input', renderRsInventory);
+      document.getElementById('rs-inv-category').addEventListener('change', renderRsInventory);
+      document.getElementById('btn-submit-restock').addEventListener('click', handleRestockSubmit);
+      
+      // Inputs tracking for Pending Guards & Totals
+      document.querySelectorAll('.rs-input').forEach(input => {
+        input.addEventListener('focus', (e) => handleInputFocus(e, ['ana_admin_pending_restock']));
+      });
+      document.querySelectorAll('.rs-pay-input').forEach(input => {
+        input.addEventListener('input', updateRestockTotals);
+      });
+      document.getElementById('rs-supplier').addEventListener('input', updateRestockTotals);
+
+      // Expense Tab
+      document.querySelectorAll('.ex-input').forEach(input => {
+        input.addEventListener('focus', (e) => handleInputFocus(e, ['ana_admin_pending_expense']));
+      });
+      document.getElementById('ex-amount').addEventListener('input', validateExpenseForm);
+      document.getElementById('btn-submit-expense').addEventListener('click', handleExpenseSubmit);
+
+      // Success Screen
+      document.getElementById('btn-dismiss-success').addEventListener('click', () => {
+        document.getElementById('success-screen').style.display = 'none';
+      });
+    }
+  </script>
+</body>
+</html>
