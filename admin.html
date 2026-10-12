@@ -2487,7 +2487,7 @@
       btn.textContent = "PROCESSING...";
       try {
          const payload = { item: state.trItem, sourceBranch: source, destBranch: dest, qty, notes: document.getElementById('tr-notes').value.trim() };
-         const res = await apiCall("submitTransfer", payload, 'ana_admin_pending_transfer', `Transfer: ${qty}x ${state.trItem}`);
+         const res = await apiCall("submitStockTransfer", payload, 'ana_admin_pending_transfer', `Transfer: ${qty}x ${state.trItem}`);
          if (!res.success) {
            err.textContent = res.error;
            err.style.display = 'block';
